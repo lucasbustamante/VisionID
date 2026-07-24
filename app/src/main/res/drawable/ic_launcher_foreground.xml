@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- cantos da moldura biométrica -->
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="5"
+        android:strokeLineCap="round" android:pathData="M28,38 L28,29 Q28,24 33,24 L42,24" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="5"
+        android:strokeLineCap="round" android:pathData="M66,24 L75,24 Q80,24 80,29 L80,38" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="5"
+        android:strokeLineCap="round" android:pathData="M28,70 L28,79 Q28,84 33,84 L42,84" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="5"
+        android:strokeLineCap="round" android:pathData="M66,84 L75,84 Q80,84 80,79 L80,70" />
+
+    <!-- contorno do rosto -->
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="4.5"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M50,34 C40,34 34,42 34,53 L34,59 C34,70 42,77 53,77 C57,77 61,76 64,74" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M41,51 A2.7,2.7 0,1 0,46.4 51 A2.7,2.7 0,1 0,41 51" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="3"
+        android:strokeLineCap="round" android:pathData="M42,64 Q48,69 54,64" />
+
+    <!-- QR Code dentro da metade direita do rosto -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M55,39h9v9h-9z M57,41h5v5h-5z" android:fillType="evenOdd" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M69,39h9v9h-9z M71,41h5v5h-5z" android:fillType="evenOdd" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M55,55h9v9h-9z M57,57h5v5h-5z" android:fillType="evenOdd" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M67,51h4v4h-4z M73,51h5v4h-5z M67,57h4v4h-4z M73,57h3v3h-3z M78,62h3v3h-3z M67,64h4v4h-4z M73,68h5v4h-5z M55,68h4v4h-4z M61,72h4v4h-4z" />
+</vector>

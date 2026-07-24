@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#1E1E1E</color>
+    <color name="white">#FFFFFF</color>
+    <color name="itau_orange">#EC7000</color>
+    <color name="itau_orange_dark">#C95B00</color>
+    <color name="itau_orange_light">#FF9B3D</color>
+    <color name="itau_cream">#FFF5EB</color>
+    <color name="itau_navy">#001E60</color>
+    <color name="text_dark">#2A211B</color>
+</resources>
