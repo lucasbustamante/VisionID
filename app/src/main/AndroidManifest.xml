@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
@@ -10,6 +11,7 @@
         android:required="true" />
 
     <application
+        android:name=".VisionIdApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -17,6 +19,14 @@
         android:enableOnBackInvokedCallback="true"
         android:label="Bio Facial"
         android:theme="@style/Theme.LaranjinhaQrWebView">
+
+        <activity
+            android:name=".LogDetailActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".LogsActivity"
+            android:exported="false" />
 
         <activity
             android:name=".WebViewActivity"
