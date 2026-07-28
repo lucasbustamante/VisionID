@@ -4,3 +4,8 @@ local.properties
 build/
 app/build/
 *.iml
+
+# Assinatura local
+keystore.properties
+*.jks
+*.keystore

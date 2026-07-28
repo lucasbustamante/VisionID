@@ -16,7 +16,7 @@
         android:paddingTop="7dp"
         android:paddingRight="12dp"
         android:paddingBottom="7dp"
-        android:text="V1.0.0"
+        android:text="V1.1"
         android:textColor="@color/white"
         android:textSize="13sp"
         android:textStyle="bold" />

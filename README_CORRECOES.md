@@ -1,4 +1,4 @@
-# VisionID — Bio Facial V1.0.0 corrigido
+# VisionID — Bio Facial V1.1 corrigido
 
 Correções realizadas:
 
@@ -8,7 +8,7 @@ Correções realizadas:
 - Novo ícone do aplicativo: rosto de biometria facial com QR Code dentro.
 - Ícones gerados para mdpi, hdpi, xhdpi, xxhdpi e xxxhdpi.
 - Adaptive icon mantido para Android 8 ou superior.
-- Mantido o nome “Bio Facial”, splash “VisionID”, botão “INICIAR” e versão V1.0.0.
+- Mantido o nome “Bio Facial”, splash “VisionID”, botão “INICIAR” e versão V1.1.
 
 Para gerar o APK:
 
