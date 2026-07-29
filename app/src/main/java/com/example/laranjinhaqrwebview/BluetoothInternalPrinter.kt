@@ -5,7 +5,11 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.Build
+import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 import java.util.UUID
 
 /**
@@ -15,8 +19,25 @@ import java.util.UUID
 internal object BluetoothInternalPrinter {
     private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
+    fun print(context: Context, text: String): PrinterAttempt = send(context, "comprovante") { output ->
+        output.write(byteArrayOf(0x1B, 0x40)) // ESC @: inicializa
+        output.write(text.toByteArray(Charsets.US_ASCII))
+        output.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A))
+    }
+
+    fun printBitmap(context: Context, bitmap: Bitmap): PrinterAttempt = send(context, "fotografia") { output ->
+        output.write(byteArrayOf(0x1B, 0x40)) // ESC @
+        output.write(byteArrayOf(0x1B, 0x61, 0x01)) // ESC a 1: centraliza
+        output.write(toEscPosRaster(bitmap))
+        output.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A))
+    }
+
     @SuppressLint("MissingPermission")
-    fun print(context: Context, text: String): PrinterAttempt {
+    private fun send(
+        context: Context,
+        contentDescription: String,
+        writer: (OutputStream) -> Unit
+    ): PrinterAttempt {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -42,23 +63,78 @@ internal object BluetoothInternalPrinter {
                     name.contains("POSPrinter", true)
             }
         }.getOrElse {
-            return PrinterAttempt(true, false, "BluetoothPrinter interno", "Falha ao consultar dispositivos pareados: ${it.message.orEmpty()}")
-        } ?: return PrinterAttempt(false, false, "BluetoothPrinter interno", "Dispositivo virtual BluetoothPrinter não encontrado.")
+            return PrinterAttempt(
+                true,
+                false,
+                "BluetoothPrinter interno",
+                "Falha ao consultar dispositivos pareados: ${it.message.orEmpty()}"
+            )
+        } ?: return PrinterAttempt(
+            false,
+            false,
+            "BluetoothPrinter interno",
+            "Dispositivo virtual BluetoothPrinter não encontrado."
+        )
 
         return try {
             adapter.cancelDiscovery()
             device.createRfcommSocketToServiceRecord(sppUuid).use { socket ->
                 socket.connect()
                 socket.outputStream.use { output ->
-                    output.write(byteArrayOf(0x1B, 0x40)) // ESC @: inicializa
-                    output.write(text.toByteArray(Charsets.US_ASCII))
-                    output.write(byteArrayOf(0x0A, 0x0A, 0x0A, 0x0A))
+                    writer(output)
                     output.flush()
                 }
             }
-            PrinterAttempt(true, true, "BluetoothPrinter interno", "Comprovante enviado por ESC/POS ao dispositivo ${device.name}.")
-        } catch (t: Throwable) {
-            PrinterAttempt(true, false, "BluetoothPrinter interno", "${t.javaClass.simpleName}: ${t.message.orEmpty()}")
+            PrinterAttempt(
+                true,
+                true,
+                "BluetoothPrinter interno",
+                "${contentDescription.replaceFirstChar { it.uppercase() }} enviado por ESC/POS ao dispositivo ${device.name}."
+            )
+        } catch (error: Throwable) {
+            PrinterAttempt(
+                true,
+                false,
+                "BluetoothPrinter interno",
+                "${error.javaClass.simpleName}: ${error.message.orEmpty()}"
+            )
         }
+    }
+
+    /** Converte Bitmap preto/branco no comando GS v 0 do protocolo ESC/POS. */
+    private fun toEscPosRaster(bitmap: Bitmap): ByteArray {
+        val width = bitmap.width
+        val height = bitmap.height
+        val widthBytes = (width + 7) / 8
+        val result = ByteArrayOutputStream(8 + widthBytes * height)
+
+        result.write(0x1D)
+        result.write(0x76)
+        result.write(0x30)
+        result.write(0x00)
+        result.write(widthBytes and 0xFF)
+        result.write((widthBytes shr 8) and 0xFF)
+        result.write(height and 0xFF)
+        result.write((height shr 8) and 0xFF)
+
+        for (y in 0 until height) {
+            for (byteX in 0 until widthBytes) {
+                var value = 0
+                for (bit in 0 until 8) {
+                    val x = byteX * 8 + bit
+                    if (x < width) {
+                        val pixel = bitmap.getPixel(x, y)
+                        val luminance = (
+                            Color.red(pixel) * 299 +
+                                Color.green(pixel) * 587 +
+                                Color.blue(pixel) * 114
+                            ) / 1000
+                        if (luminance < 128) value = value or (0x80 shr bit)
+                    }
+                }
+                result.write(value)
+            }
+        }
+        return result.toByteArray()
     }
 }

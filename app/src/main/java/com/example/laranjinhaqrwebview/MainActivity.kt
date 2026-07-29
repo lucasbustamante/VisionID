@@ -5,27 +5,25 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.laranjinhaqrwebview.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val handler = Handler(Looper.getMainLooper())
-    private var logPromptOpened = false
+    private var technicalAreaOpened = false
 
-    private val openLogsPrompt = Runnable {
-        logPromptOpened = true
-        AlertDialog.Builder(this)
-            .setTitle("Área de logs")
-            .setMessage("Deseja abrir a área de logs?")
-            .setNegativeButton("Não") { _, _ ->
-            }
-            .setPositiveButton("Sim") { _, _ ->
-                startActivity(Intent(this, LogsActivity::class.java))
-            }
-            .setOnDismissListener { logPromptOpened = false }
-            .show()
+    private val openTechnicalArea = Runnable {
+        if (isFinishing || isDestroyed || technicalAreaOpened) return@Runnable
+
+        technicalAreaOpened = true
+        AppLog.info(
+            this,
+            category = "TECNICO",
+            event = "TECHNICAL_AREA_OPENED",
+            message = "Área técnica aberta pelo toque prolongado na versão"
+        )
+        startActivity(Intent(this, TechnicalAreaActivity::class.java))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,17 +32,22 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.versionText.text = "V${BuildConfig.VERSION_NAME}"
+        binding.versionText.setOnClickListener { /* Necessário para acessibilidade do toque prolongado. */ }
         binding.versionText.setOnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    if (!logPromptOpened) handler.postDelayed(openLogsPrompt, LOG_HOLD_DURATION_MS)
+                    if (!technicalAreaOpened) {
+                        handler.postDelayed(openTechnicalArea, TECHNICAL_AREA_HOLD_DURATION_MS)
+                    }
                     true
                 }
+
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    handler.removeCallbacks(openLogsPrompt)
+                    handler.removeCallbacks(openTechnicalArea)
                     view.performClick()
                     true
                 }
+
                 else -> true
             }
         }
@@ -54,12 +57,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        technicalAreaOpened = false
+    }
+
     override fun onDestroy() {
-        handler.removeCallbacks(openLogsPrompt)
+        handler.removeCallbacks(openTechnicalArea)
         super.onDestroy()
     }
 
     companion object {
-        private const val LOG_HOLD_DURATION_MS = 3000L
+        private const val TECHNICAL_AREA_HOLD_DURATION_MS = 3_000L
     }
 }

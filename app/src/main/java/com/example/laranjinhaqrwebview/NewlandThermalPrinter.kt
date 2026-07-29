@@ -1,6 +1,7 @@
 package com.example.laranjinhaqrwebview
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.SystemClock
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
@@ -14,6 +15,7 @@ import java.util.concurrent.TimeUnit
  * tolerar diferenças entre o SDK empacotado e versões presentes no firmware.
  */
 internal object NewlandThermalPrinter {
+    private const val BITMAP_CENTER_POSITION = 1
     private data class LoaderEntry(val label: String, val loader: ClassLoader)
 
     fun print(context: Context, text: String): PrinterAttempt {
@@ -51,6 +53,54 @@ internal object NewlandThermalPrinter {
             backend = "Newland",
             detail = details.joinToString(" | ").ifBlank {
                 "Nenhuma classe de impressão Newland foi localizada."
+            }.take(1900)
+        )
+    }
+
+    fun printBitmap(context: Context, bitmap: Bitmap): PrinterAttempt {
+        val loaders = classLoaders(context)
+        val details = mutableListOf<String>()
+
+        val strategies = listOf<Pair<String, () -> Boolean?>>(
+            "Newland MESDK" to { printMesdkBitmap(context, loaders, bitmap, details) },
+            "Newland NSDK/Manager" to {
+                printManagerFamiliesBitmap(context, loaders, bitmap, details)
+            }
+        )
+
+        var apiFound = false
+        for ((name, strategy) in strategies) {
+            val result = runCatching(strategy).getOrElse {
+                details += "$name bitmap: ${rootCause(it)}"
+                null
+            }
+            if (result != null) {
+                apiFound = true
+                if (result) {
+                    return PrinterAttempt(
+                        available = true,
+                        success = true,
+                        backend = name,
+                        detail = buildString {
+                            append("Bitmap ")
+                            append(bitmap.width)
+                            append("x")
+                            append(bitmap.height)
+                            append(" aceito pela API Newland. ")
+                            append(details.joinToString(" | ").take(900))
+                        }
+                    )
+                }
+                details += "$name: API encontrada, mas não aceitou o bitmap."
+            }
+        }
+
+        return PrinterAttempt(
+            available = apiFound,
+            success = false,
+            backend = "Newland",
+            detail = details.joinToString(" | ").ifBlank {
+                "Nenhuma API Newland compatível com impressão de Bitmap foi localizada."
             }.take(1900)
         )
     }
@@ -172,6 +222,213 @@ internal object NewlandThermalPrinter {
         callOptional(printer, listOf("init", "initialize", "open", "reset"))
         val result = invokePrintMethod(printer, text)
         return accepted(result)
+    }
+
+    private fun printMesdkBitmap(
+        context: Context,
+        loaders: List<LoaderEntry>,
+        bitmap: Bitmap,
+        details: MutableList<String>
+    ): Boolean? {
+        val connLocated = loadFirst(loaders, "com.newland.me.ConnUtils") ?: run {
+            details += "MESDK bitmap: com.newland.me.ConnUtils ausente."
+            return null
+        }
+        details += "MESDK bitmap carregado por ${connLocated.first}."
+
+        val getDeviceManager = connLocated.second.methods.firstOrNull {
+            Modifier.isStatic(it.modifiers) &&
+                it.name == "getDeviceManager" &&
+                it.parameterCount == 0
+        } ?: run {
+            details += "MESDK bitmap: getDeviceManager() ausente."
+            return false
+        }
+
+        val deviceManager = getDeviceManager.invoke(null) ?: run {
+            details += "MESDK bitmap: getDeviceManager() retornou null."
+            return false
+        }
+
+        var device = callValue(deviceManager, listOf("getDevice"))
+        if (device == null) {
+            runCatching { callOptional(deviceManager, listOf("connect")) }
+                .onFailure { details += "MESDK bitmap connect(): ${rootCause(it)}" }
+
+            val limit = SystemClock.elapsedRealtime() + 2_500L
+            while (device == null && SystemClock.elapsedRealtime() < limit) {
+                SystemClock.sleep(100)
+                device = callValue(deviceManager, listOf("getDevice"))
+            }
+        }
+
+        if (device == null) {
+            runCatching {
+                callOptional(deviceManager, listOf("init", "initialize"), context.applicationContext)
+            }.onFailure { details += "MESDK bitmap init(Context): ${rootCause(it)}" }
+            runCatching { callOptional(deviceManager, listOf("connect")) }
+                .onFailure { details += "MESDK bitmap connect pós-init: ${rootCause(it)}" }
+            device = callValue(deviceManager, listOf("getDevice"))
+        }
+
+        val actualDevice = device ?: run {
+            details += "MESDK bitmap: Device integrado indisponível."
+            return false
+        }
+
+        val moduleLocated = loadFirst(
+            loaders,
+            "com.newland.mtype.ModuleType",
+            "com.newland.me.ModuleType"
+        ) ?: run {
+            details += "MESDK bitmap: ModuleType ausente."
+            return false
+        }
+
+        val printerType = moduleLocated.second.enumConstants?.firstOrNull {
+            it.toString().equals("COMMON_PRINTER", true)
+        } ?: moduleLocated.second.enumConstants?.firstOrNull {
+            it.toString().contains("PRINTER", true)
+        } ?: run {
+            details += "MESDK bitmap: COMMON_PRINTER não encontrado."
+            return false
+        }
+
+        val printer = callValue(actualDevice, listOf("getStandardModule"), printerType)
+            ?: callValue(actualDevice, listOf("getModule", "getDeviceModule"), printerType)
+            ?: run {
+                details += "MESDK bitmap: módulo COMMON_PRINTER retornou null."
+                return false
+            }
+
+        callOptional(printer, listOf("init", "initialize", "open"))
+        val status = callValue(printer, listOf("getStatus", "getPrinterStatus", "status"))
+        details += "MESDK bitmap: printer=${printer.javaClass.name}; status=${status ?: "não informado"}."
+
+        val result = invokeBitmapPrintMethod(printer, bitmap)
+        details += "MESDK bitmap: retorno=${result?.toString()?.take(180) ?: "void/null"}."
+        return accepted(result)
+    }
+
+    private fun printManagerFamiliesBitmap(
+        context: Context,
+        loaders: List<LoaderEntry>,
+        bitmap: Bitmap,
+        details: MutableList<String>
+    ): Boolean? {
+        val located = loadFirst(
+            loaders,
+            "com.newland.nsdk.core.api.NSDKModuleManager",
+            "com.newland.nsdk.core.api.NSDKManager",
+            "com.newland.nsdk.core.api.NSDKModuleManagerImpl",
+            "com.newland.sdk.module.printer.PrinterManager",
+            "com.newland.sdk.printer.PrinterManager",
+            "com.newland.payment.printer.PrinterManager",
+            "com.newland.pospp.openapi.manager.NewlandPrinterManager",
+            "com.newland.pospp.openapi.manager.PrinterManager"
+        ) ?: return null
+
+        details += "Manager bitmap ${located.second.name} carregado por ${located.first}."
+        val manager = instance(located.second, context) ?: return false
+        callOptional(manager, listOf("init", "initialize", "open"), context.applicationContext)
+        callOptional(manager, listOf("init", "initialize", "open"))
+
+        val printer = callValue(manager, listOf("getPrinter", "getPrinterManager")) ?: manager
+        callOptional(printer, listOf("init", "initialize", "open", "reset"))
+        val result = invokeBitmapPrintMethod(printer, bitmap)
+        return accepted(result)
+    }
+
+    private fun invokeBitmapPrintMethod(target: Any, bitmap: Bitmap): Any? {
+        val methods = target.javaClass.methods.toList()
+        val names = setOf("print", "printBitmap", "printBitMap", "printImage", "addImage")
+
+        // Assinatura confirmada no MESDK usado pela família N9xx:
+        // PrinterResult print(int position, Bitmap bitmap, long timeout, TimeUnit unit)
+        methods.firstOrNull { method ->
+            method.name in names &&
+                method.parameterCount == 4 &&
+                isIntegerType(method.parameterTypes[0]) &&
+                method.parameterTypes[1].isAssignableFrom(Bitmap::class.java) &&
+                isNumericType(method.parameterTypes[2]) &&
+                TimeUnit::class.java.isAssignableFrom(method.parameterTypes[3])
+        }?.let { method ->
+            return method.invoke(
+                target,
+                numericValue(method.parameterTypes[0], BITMAP_CENTER_POSITION),
+                bitmap,
+                numericTimeout(method.parameterTypes[2]),
+                TimeUnit.SECONDS
+            )
+        }
+
+        methods.firstOrNull { method ->
+            method.name in names &&
+                method.parameterCount == 3 &&
+                method.parameterTypes[0].isAssignableFrom(Bitmap::class.java) &&
+                isNumericType(method.parameterTypes[1]) &&
+                TimeUnit::class.java.isAssignableFrom(method.parameterTypes[2])
+        }?.let { method ->
+            return method.invoke(
+                target,
+                bitmap,
+                numericTimeout(method.parameterTypes[1]),
+                TimeUnit.SECONDS
+            )
+        }
+
+        methods.firstOrNull { method ->
+            method.name in names &&
+                method.parameterCount == 2 &&
+                isIntegerType(method.parameterTypes[0]) &&
+                method.parameterTypes[1].isAssignableFrom(Bitmap::class.java)
+        }?.let { method ->
+            return method.invoke(
+                target,
+                numericValue(method.parameterTypes[0], BITMAP_CENTER_POSITION),
+                bitmap
+            )
+        }
+
+        methods.firstOrNull { method ->
+            method.name in names &&
+                method.parameterTypes.contentEquals(arrayOf(Bitmap::class.java))
+        }?.let { method ->
+            return method.invoke(target, bitmap)
+        }
+
+        throw NoSuchMethodException(
+            "Nenhum método de bitmap compatível em ${target.javaClass.name}. Métodos: " +
+                methods.filter {
+                    it.name.contains("print", true) || it.name.contains("image", true)
+                }.joinToString { method ->
+                    "${method.name}(${method.parameterTypes.joinToString { it.simpleName }})"
+                }.take(900)
+        )
+    }
+
+    private fun isIntegerType(type: Class<*>): Boolean =
+        type == Int::class.javaPrimitiveType ||
+            type == Int::class.javaObjectType ||
+            type == Short::class.javaPrimitiveType ||
+            type == Short::class.javaObjectType ||
+            type == Byte::class.javaPrimitiveType ||
+            type == Byte::class.javaObjectType
+
+    private fun isNumericType(type: Class<*>): Boolean =
+        isIntegerType(type) ||
+            type == Long::class.javaPrimitiveType ||
+            type == Long::class.javaObjectType ||
+            type == Float::class.javaPrimitiveType ||
+            type == Float::class.javaObjectType ||
+            type == Double::class.javaPrimitiveType ||
+            type == Double::class.javaObjectType
+
+    private fun numericValue(type: Class<*>, value: Int): Any = when (type) {
+        Byte::class.javaPrimitiveType, Byte::class.javaObjectType -> value.toByte()
+        Short::class.javaPrimitiveType, Short::class.javaObjectType -> value.toShort()
+        Long::class.javaPrimitiveType, Long::class.javaObjectType -> value.toLong()
+        else -> value
     }
 
     private fun invokePrintMethod(target: Any, text: String): Any? {

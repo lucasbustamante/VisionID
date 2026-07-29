@@ -33,6 +33,16 @@
         android:theme="@style/Theme.LaranjinhaQrWebView">
 
         <activity
+            android:name=".CameraTestActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".TechnicalAreaActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".LogDetailActivity"
             android:exported="false" />
 
