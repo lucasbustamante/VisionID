@@ -22,7 +22,7 @@ class LogDetailActivity : AppCompatActivity() {
         }
 
         binding.logTitle.text = entry.message
-        binding.logDetails.text = buildString {
+        val printableContent = buildString {
             appendLine("Data e hora")
             appendLine(AppLog.formatDateTime(entry.timestamp))
             appendLine()
@@ -40,6 +40,17 @@ class LogDetailActivity : AppCompatActivity() {
             appendLine()
             appendLine("Detalhes")
             appendLine(entry.details.ifBlank { "Sem informações adicionais." })
+        }
+        binding.logDetails.text = printableContent
+        binding.printLogButton.setOnClickListener {
+            binding.printLogButton.isEnabled = false
+            val originalText = binding.printLogButton.text
+            binding.printLogButton.text = "Imprimindo..."
+            LogPrinter.printAsync(this, "VisionID - Detalhe do log", printableContent) { result ->
+                binding.printLogButton.isEnabled = true
+                binding.printLogButton.text = originalText
+                android.widget.Toast.makeText(this, result.message, android.widget.Toast.LENGTH_LONG).show()
+            }
         }
     }
 

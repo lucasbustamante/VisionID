@@ -2,13 +2,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Fallback da impressora interna XCheng exposta como BluetoothPrinter. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <uses-feature
         android:name="android.hardware.camera.any"
         android:required="true" />
+
+    <!-- Permite localizar o serviço interno da impressora da família Positivo/XCheng. -->
+    <queries>
+        <package android:name="com.xcheng.printerservice" />
+        <intent>
+            <action android:name="com.xcheng.printerservice.IPrinterService" />
+        </intent>
+    </queries>
 
     <application
         android:name=".VisionIdApplication"

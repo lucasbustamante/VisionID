@@ -24,8 +24,8 @@ android {
         applicationId = "com.example.laranjinhaqrwebview"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
     }
 
     signingConfigs {
@@ -57,6 +57,13 @@ android {
     buildFeatures {
         buildConfig = true
         viewBinding = true
+        aidl = true
+    }
+
+    sourceSets {
+        getByName("main") {
+            aidl.srcDirs("src/main/aidl")
+        }
     }
 
     compileOptions {
@@ -80,4 +87,8 @@ dependencies {
     implementation("androidx.camera:camera-view:1.4.1")
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
+    // MESDK Newland 3.10.46, usado no N960K. O commit é fixo para
+    // evitar que o build mude quando o repositório for atualizado.
+    implementation("com.github.lion0508:Newland_MESDK:4f0fc6d")
 }

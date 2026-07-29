@@ -296,9 +296,6 @@ class WebViewActivity : AppCompatActivity() {
             if (!hasPermission(Manifest.permission.CAMERA)) {
                 add(Manifest.permission.CAMERA)
             }
-            if (!hasPermission(Manifest.permission.RECORD_AUDIO)) {
-                add(Manifest.permission.RECORD_AUDIO)
-            }
         }
 
         AppLog.info(this, "PERMISSION", "INITIAL_PERMISSION_CHECK", "Verificação inicial de permissões", mapOf("missing" to missing.joinToString()))
@@ -331,12 +328,6 @@ class WebViewActivity : AppCompatActivity() {
                 add(Manifest.permission.CAMERA)
             }
 
-            if (
-                request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE) &&
-                !hasPermission(Manifest.permission.RECORD_AUDIO)
-            ) {
-                add(Manifest.permission.RECORD_AUDIO)
-            }
         }
     }
 
@@ -346,8 +337,7 @@ class WebViewActivity : AppCompatActivity() {
                 PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
                     hasPermission(Manifest.permission.CAMERA)
 
-                PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
-                    hasPermission(Manifest.permission.RECORD_AUDIO)
+                PermissionRequest.RESOURCE_AUDIO_CAPTURE -> false
 
                 else -> false
             }

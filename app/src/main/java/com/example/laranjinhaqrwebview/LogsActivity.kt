@@ -19,6 +19,7 @@ class LogsActivity : AppCompatActivity() {
 
         binding.backButton.setOnClickListener { finish() }
         binding.clearLogsButton.setOnClickListener { confirmClear() }
+        binding.printLogsButton.setOnClickListener { printAllLogs() }
     }
 
     override fun onResume() {
@@ -62,6 +63,37 @@ class LogsActivity : AppCompatActivity() {
             if (row is Row.Entry) {
                 startActivity(Intent(this, LogDetailActivity::class.java).putExtra(LogDetailActivity.EXTRA_LOG_ID, row.value.id))
             }
+        }
+    }
+
+    private fun printAllLogs() {
+        val entries = AppLog.readAll(this)
+        if (entries.isEmpty()) {
+            android.widget.Toast.makeText(this, "Não há logs para imprimir.", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val content = buildString {
+            appendLine("VISIONID - LOGS DO APLICATIVO")
+            appendLine("Gerado em: ${AppLog.formatDateTime(System.currentTimeMillis())}")
+            appendLine("Registros: ${entries.size}")
+            appendLine()
+            entries.reversed().forEach { entry ->
+                appendLine("--------------------------------")
+                appendLine(AppLog.formatDateTime(entry.timestamp))
+                appendLine("[${entry.level}] ${entry.category}")
+                appendLine(entry.event)
+                appendLine(entry.message)
+                if (entry.details.isNotBlank()) appendLine(entry.details)
+            }
+        }
+        binding.printLogsButton.isEnabled = false
+        val originalText = binding.printLogsButton.text
+        binding.printLogsButton.text = "Imprimindo..."
+        LogPrinter.printAsync(this, "VisionID - Logs", content) { result ->
+            binding.printLogsButton.isEnabled = true
+            binding.printLogsButton.text = originalText
+            android.widget.Toast.makeText(this, result.message, android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
