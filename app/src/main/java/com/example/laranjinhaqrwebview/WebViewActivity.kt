@@ -9,6 +9,8 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
+import android.widget.FrameLayout
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
@@ -32,6 +34,7 @@ class WebViewActivity : AppCompatActivity() {
     private var pendingUrl: String? = null
     private var pageLoaded = false
     private var automaticPageActivationScheduled = false
+    private var closeButtonShrinkRunnable: Runnable? = null
 
     private val runtimePermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -67,6 +70,7 @@ class WebViewActivity : AppCompatActivity() {
         AppLog.info(this, "WEBVIEW", "WEBVIEW_CREATED", "WebView criado", AppLog.deviceSnapshot(this) + mapOf("url" to AppLog.safeUrl(url)))
 
         configureWebView()
+        configureCloseJourneyButton()
         configureBackNavigation()
 
         // A câmera já costuma estar autorizada pelo leitor de QR Code. O áudio é solicitado
@@ -75,6 +79,127 @@ class WebViewActivity : AppCompatActivity() {
         // já foi concedida ou está administrada pela política corporativa.
         requestInitialRuntimePermissionsThenLoad()
     }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun configureCloseJourneyButton() {
+        val button = binding.closeJourneyButton
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        var downRawX = 0f
+        var downRawY = 0f
+        var initialTranslationX = 0f
+        var dragging = false
+
+        button.setOnClickListener {
+            AppLog.info(this, "WEBVIEW", "CLOSE_JOURNEY_CLICKED", "Jornada encerrada pelo botão flutuante")
+            finish()
+        }
+
+        button.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    initialTranslationX = view.translationX
+                    dragging = false
+                    view.isPressed = true
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    val deltaX = event.rawX - downRawX
+                    val deltaY = event.rawY - downRawY
+                    if (!dragging && (kotlin.math.abs(deltaX) > touchSlop || kotlin.math.abs(deltaY) > touchSlop)) {
+                        dragging = true
+                    }
+                    if (dragging) {
+                        val parentWidth = binding.webViewContainer.width
+                        val layoutParams = view.layoutParams as FrameLayout.LayoutParams
+                        val leftMargin = layoutParams.leftMargin
+                        val rightMargin = layoutParams.rightMargin
+                        val maxTranslation = (parentWidth - view.width - leftMargin - rightMargin).coerceAtLeast(0)
+                        view.translationX = (initialTranslationX + deltaX).coerceIn(0f, maxTranslation.toFloat())
+                    }
+                    true
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    view.isPressed = false
+                    if (dragging) {
+                        snapCloseButtonToNearestSide()
+                    } else {
+                        view.performClick()
+                    }
+                    true
+                }
+
+                MotionEvent.ACTION_CANCEL -> {
+                    view.isPressed = false
+                    if (dragging) snapCloseButtonToNearestSide()
+                    true
+                }
+
+                else -> false
+            }
+        }
+
+        closeButtonShrinkRunnable = Runnable {
+            if (!isFinishing && !isDestroyed) {
+                button.animate()
+                    .alpha(0f)
+                    .setDuration(CLOSE_BUTTON_ANIMATION_MS)
+                    .withEndAction {
+                        button.text = "✕"
+                        button.setPadding(0, 0, 0, 0)
+                        val wasOnRight = button.translationX > 0f
+                        button.layoutParams = button.layoutParams.apply {
+                            width = dpToPx(CLOSE_BUTTON_COLLAPSED_SIZE_DP)
+                        }
+                        button.alpha = 0f
+                        button.post {
+                            if (wasOnRight) {
+                                moveCloseButtonToRightImmediately()
+                            } else {
+                                button.translationX = 0f
+                            }
+                            button.animate().alpha(1f).setDuration(CLOSE_BUTTON_ANIMATION_MS).start()
+                        }
+                    }
+                    .start()
+            }
+        }.also { button.postDelayed(it, CLOSE_BUTTON_EXPANDED_DURATION_MS) }
+    }
+
+    private fun moveCloseButtonToRightImmediately() {
+        val button = binding.closeJourneyButton
+        val parentWidth = binding.webViewContainer.width
+        val layoutParams = button.layoutParams as FrameLayout.LayoutParams
+        button.translationX = (parentWidth - button.width - layoutParams.leftMargin - layoutParams.rightMargin)
+            .coerceAtLeast(0)
+            .toFloat()
+    }
+
+    private fun snapCloseButtonToNearestSide() {
+        val button = binding.closeJourneyButton
+        val parentWidth = binding.webViewContainer.width
+        if (parentWidth <= 0 || button.width <= 0) return
+
+        val layoutParams = button.layoutParams as FrameLayout.LayoutParams
+        val leftMargin = layoutParams.leftMargin
+        val rightMargin = layoutParams.rightMargin
+        val maxTranslation = (parentWidth - button.width - leftMargin - rightMargin).coerceAtLeast(0).toFloat()
+        val target = if (button.translationX + button.width / 2f < parentWidth / 2f) 0f else maxTranslation
+
+        button.animate()
+            .translationX(target)
+            .setDuration(CLOSE_BUTTON_ANIMATION_MS)
+            .start()
+
+        val side = if (target == 0f) "left" else "right"
+        AppLog.info(this, "WEBVIEW", "CLOSE_BUTTON_MOVED", "Botão de fechamento movido", mapOf("side" to side))
+    }
+
+    private fun dpToPx(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView() {
@@ -409,6 +534,8 @@ class WebViewActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         AppLog.info(this, "LIFECYCLE", "WEBVIEW_DESTROYED", "WebView encerrado")
+        closeButtonShrinkRunnable?.let { binding.closeJourneyButton.removeCallbacks(it) }
+        closeButtonShrinkRunnable = null
         pendingWebPermissionRequest?.deny()
         pendingWebPermissionRequest = null
 
@@ -428,5 +555,8 @@ class WebViewActivity : AppCompatActivity() {
         private const val CAMERA_RELEASE_DELAY_MS = 500L
         private const val AUTO_PAGE_ACTIVATION_DELAY_MS = 700L
         private const val AUTOMATIC_TAP_DURATION_MS = 80L
+        private const val CLOSE_BUTTON_EXPANDED_DURATION_MS = 5_000L
+        private const val CLOSE_BUTTON_ANIMATION_MS = 180L
+        private const val CLOSE_BUTTON_COLLAPSED_SIZE_DP = 48
     }
 }

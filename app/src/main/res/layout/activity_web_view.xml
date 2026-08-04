@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/webViewContainer"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -15,4 +16,23 @@
         android:layout_height="4dp"
         android:layout_gravity="top"
         android:max="100" />
+
+    <TextView
+        android:id="@+id/closeJourneyButton"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_close_journey_button"
+        android:contentDescription="Fechar jornada"
+        android:elevation="12dp"
+        android:gravity="center"
+        android:minWidth="48dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="✕  Fechar jornada"
+        android:textColor="@color/white"
+        android:textSize="15sp"
+        android:textStyle="bold" />
 </FrameLayout>
