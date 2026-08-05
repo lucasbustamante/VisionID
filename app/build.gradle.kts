@@ -25,7 +25,7 @@ android {
         applicationId = "com.example.laranjinhaqrwebview"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
+        versionCode = 13
         versionName = "1.5"
         manifestPlaceholders["cleartextTrafficPermitted"] = "false"
     }

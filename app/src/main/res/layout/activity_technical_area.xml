@@ -51,11 +51,85 @@
             android:textColor="@color/white"
             android:textSize="15sp" />
 
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/qrSecurityCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            app:cardBackgroundColor="#22FFFFFF"
+            app:cardCornerRadius="16dp"
+            app:strokeColor="#55FFFFFF"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="18dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="TRAVA DE QR CODE"
+                        android:textColor="@color/white"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Permite somente links dos domínios autorizados do Itaú."
+                        android:textColor="#DFFFFFFF"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/qrSecurityStatusText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_qr_security_status"
+                        android:gravity="center"
+                        android:minWidth="92dp"
+                        android:paddingLeft="12dp"
+                        android:paddingTop="5dp"
+                        android:paddingRight="12dp"
+                        android:paddingBottom="5dp"
+                        android:text="ATIVADA"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/qrSecuritySwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:checked="true"
+                        android:contentDescription="Ativar ou desativar trava de QR Code"
+                        android:minWidth="56dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/openLogsButton"
             android:layout_width="match_parent"
             android:layout_height="60dp"
-            android:layout_marginTop="34dp"
+            android:layout_marginTop="20dp"
             android:text="LOGS DO APLICATIVO"
             android:textColor="@color/itau_orange_dark"
             android:textSize="16sp"
