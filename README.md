@@ -5,7 +5,7 @@ Aplicativo Android em Kotlin para leitura de QR Code com câmera traseira e aber
 ## Identidade
 - Nome exibido na lista de aplicativos: **Bio Facial**
 - Marca interna e splash: **VisionID**
-- Versão inicial: **V1.1**
+- Versão atual: **V1.5**
 - Paleta visual inspirada nos tons de laranja do Itaú
 - Ícone dividido entre biometria facial e QR Code
 
@@ -14,7 +14,7 @@ Aplicativo Android em Kotlin para leitura de QR Code com câmera traseira e aber
 2. Tela inicial com botão **INICIAR**.
 3. Câmera traseira com moldura e instruções.
 4. Leitura automática de URL HTTPS em QR Code.
-5. Abertura da página em WebView, com permissão de câmera para biometria facial.
+5. Abertura da jornada em GeckoView no N960/N960K ou WebView nos demais equipamentos, com permissão de câmera para biometria facial.
 
 ## Gerar APK final
 No Git Bash, com `JAVA_HOME` configurado:

@@ -19,6 +19,7 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import com.google.common.util.concurrent.ListenableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -58,11 +59,14 @@ class QrScannerActivity : AppCompatActivity() {
 
     private fun startCamera() {
         AppLog.info(this, "CAMERA", "QR_CAMERA_STARTING", "Inicialização da câmera traseira iniciada")
-        val providerFuture = ProcessCameraProvider.getInstance(this)
-        providerFuture.addListener({
-            try {
-                val provider = providerFuture.get()
-                cameraProvider = provider
+        val providerFuture: ListenableFuture<ProcessCameraProvider> =
+            ProcessCameraProvider.getInstance(this)
+
+        providerFuture.addListener(
+            Runnable {
+                try {
+                    val provider: ProcessCameraProvider = providerFuture.get()
+                    cameraProvider = provider
 
                 val preview = Preview.Builder().build().also {
                     it.setSurfaceProvider(binding.previewView.surfaceProvider)
@@ -108,13 +112,15 @@ class QrScannerActivity : AppCompatActivity() {
                     analysis
                 )
                 AppLog.info(this, "CAMERA", "QR_CAMERA_READY", "Câmera traseira pronta para leitura")
-            } catch (error: Exception) {
-                Log.e(TAG, "Não foi possível abrir a câmera traseira", error)
-                AppLog.error(this, "CAMERA", "QR_CAMERA_FAILED", "Não foi possível abrir a câmera traseira", error)
-                Toast.makeText(this, "Não foi possível abrir a câmera traseira.", Toast.LENGTH_LONG).show()
-                finish()
-            }
-        }, ContextCompat.getMainExecutor(this))
+                } catch (error: Exception) {
+                    Log.e(TAG, "Não foi possível abrir a câmera traseira", error)
+                    AppLog.error(this, "CAMERA", "QR_CAMERA_FAILED", "Não foi possível abrir a câmera traseira", error)
+                    Toast.makeText(this, "Não foi possível abrir a câmera traseira.", Toast.LENGTH_LONG).show()
+                    finish()
+                }
+            },
+            ContextCompat.getMainExecutor(this)
+        )
     }
 
     private fun openUrl(rawValue: String) {

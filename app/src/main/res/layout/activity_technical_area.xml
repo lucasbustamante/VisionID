@@ -38,7 +38,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
             android:gravity="center"
-            android:text="VisionID V1.3"
+            android:text="VisionID V1.5"
             android:textColor="#EFFFFFFF"
             android:textSize="14sp" />
 

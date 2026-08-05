@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#202124"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:background="@color/itau_orange_dark"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/debugBackButton"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="VOLTAR"
+            android:textColor="@color/white" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Diagnóstico WebView"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/openDebugLogsButton"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="LOGS"
+            android:textColor="@color/white" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="330dp"
+        android:background="#F3F3F3"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <EditText
+                android:id="@+id/debugUrlInput"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="#FFFFFF"
+                android:hint="https://exemplo.com"
+                android:imeOptions="actionGo"
+                android:inputType="textUri"
+                android:paddingHorizontal="10dp"
+                android:singleLine="true"
+                android:textColor="#111111"
+                android:textColorHint="#777777"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/loadTypedUrlButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:text="ABRIR URL"
+                    android:textSize="11sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/loadExampleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_marginHorizontal="3dp"
+                    android:layout_weight="1"
+                    android:text="EXAMPLE.COM"
+                    android:textSize="11sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/loadLocalHtmlButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="3dp"
+                    android:layout_weight="1"
+                    android:text="HTML LOCAL"
+                    android:textSize="11sp"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/renderDefaultButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:text="CAMADA AUTO"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/renderHardwareButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginHorizontal="3dp"
+                    android:layout_weight="1"
+                    android:text="HARDWARE"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/renderSoftwareButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="3dp"
+                    android:layout_weight="1"
+                    android:text="SOFTWARE"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/recreateWebViewButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:text="RECRIAR WEBVIEW"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/clearWebDataButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginHorizontal="3dp"
+                    android:layout_weight="1"
+                    android:text="LIMPAR DADOS"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/reloadDebugButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="3dp"
+                    android:layout_weight="1"
+                    android:text="RECARREGAR"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/networkTestButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:text="TESTE HTTP/DNS"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/domProbeButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginHorizontal="3dp"
+                    android:layout_weight="1"
+                    android:text="ANALISAR DOM"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/pixelProbeButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="3dp"
+                    android:layout_weight="1"
+                    android:text="ANALISAR TELA"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/autoTestButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:text="AUTO 3 MODOS"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/resetUserAgentButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginHorizontal="3dp"
+                    android:layout_weight="1"
+                    android:text="UA PADRÃO"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/openExternalButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="3dp"
+                    android:layout_weight="1"
+                    android:text="NAVEGADOR EXTERNO"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/forceDirectProxyButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:text="PROXY DIRETO"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/restoreSystemProxyButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="3dp"
+                    android:layout_weight="1"
+                    android:text="PROXY SISTEMA"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/openGeckoButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_marginEnd="3dp"
+                    android:layout_weight="1"
+                    android:text="ABRIR COM GECKO"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/openSystemWebViewButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_marginHorizontal="3dp"
+                    android:layout_weight="1"
+                    android:text="WEBVIEW SISTEMA"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/checkPermissionsButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="3dp"
+                    android:layout_weight="1"
+                    android:text="PERMISSÕES"
+                    android:textSize="10sp"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/debugStatusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="#101010"
+                android:fontFamily="monospace"
+                android:minHeight="72dp"
+                android:padding="8dp"
+                android:text="Inicializando..."
+                android:textColor="#A8FFB0"
+                android:textIsSelectable="true"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <ProgressBar
+        android:id="@+id/debugProgressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:max="100" />
+
+    <FrameLayout
+        android:id="@+id/debugWebViewHost"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#DDDDDD" />
+
+</LinearLayout>

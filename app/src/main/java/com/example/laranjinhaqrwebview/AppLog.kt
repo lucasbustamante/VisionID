@@ -27,6 +27,7 @@ internal object AppLog {
     private const val FILE_NAME = "visionid_logs.jsonl"
     private const val MAX_FILE_BYTES = 2_000_000L
     private const val MAX_ENTRIES = 3000
+    private val HIDDEN_EVENTS = setOf("TECHNICAL_AREA_OPENED", "TECHNICAL_AREA_CLOSED")
     private val lock = Any()
 
     fun info(context: Context, category: String, event: String, message: String, details: Map<String, Any?> = emptyMap()) {
@@ -51,7 +52,10 @@ internal object AppLog {
         val file = logFile(context)
         if (!file.exists()) return@synchronized emptyList()
         file.useLines { lines ->
-            lines.mapNotNull(::parseLine).toList().sortedByDescending { it.timestamp }
+            lines.mapNotNull(::parseLine)
+                .filterNot { it.event in HIDDEN_EVENTS }
+                .toList()
+                .sortedByDescending { it.timestamp }
         }
     }
 
@@ -75,17 +79,30 @@ internal object AppLog {
         }.getOrDefault("URL não disponível")
     }
 
-    fun deviceSnapshot(context: Context): Map<String, Any?> = mapOf(
-        "appVersion" to BuildConfig.VERSION_NAME,
-        "versionCode" to BuildConfig.VERSION_CODE,
-        "manufacturer" to Build.MANUFACTURER,
-        "model" to Build.MODEL,
-        "device" to Build.DEVICE,
-        "androidVersion" to Build.VERSION.RELEASE,
-        "sdk" to Build.VERSION.SDK_INT,
-        "webViewPackage" to runCatching { android.webkit.WebView.getCurrentWebViewPackage()?.versionName }.getOrNull(),
-        "network" to networkType(context)
-    )
+    fun deviceSnapshot(context: Context): Map<String, Any?> {
+        val webViewPackage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching { android.webkit.WebView.getCurrentWebViewPackage() }.getOrNull()
+        } else {
+            null
+        }
+
+        return mapOf(
+            "appVersion" to BuildConfig.VERSION_NAME,
+            "versionCode" to BuildConfig.VERSION_CODE,
+            "manufacturer" to Build.MANUFACTURER,
+            "brand" to Build.BRAND,
+            "model" to Build.MODEL,
+            "device" to Build.DEVICE,
+            "product" to Build.PRODUCT,
+            "board" to Build.BOARD,
+            "androidVersion" to Build.VERSION.RELEASE,
+            "sdk" to Build.VERSION.SDK_INT,
+            "webViewPackageName" to webViewPackage?.packageName,
+            "webViewVersion" to webViewPackage?.versionName,
+            "webViewProviderAvailable" to (webViewPackage != null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O),
+            "network" to networkType(context)
+        )
+    }
 
     private fun write(
         context: Context,

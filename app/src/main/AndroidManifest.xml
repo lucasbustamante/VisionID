@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- Fallback da impressora interna XCheng exposta como BluetoothPrinter. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -27,7 +30,8 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:usesCleartextTraffic="false"
+        android:usesCleartextTraffic="${cleartextTrafficPermitted}"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:enableOnBackInvokedCallback="true"
         android:label="Bio Facial"
         android:theme="@style/Theme.LaranjinhaQrWebView">
@@ -50,9 +54,20 @@
             android:name=".LogsActivity"
             android:exported="false" />
 
+
+        <activity
+            android:name=".GeckoBrowserActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:process=":gecko"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="stateUnspecified|adjustResize" />
+
         <activity
             android:name=".WebViewActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:process=":webcontent" />
 
         <activity
             android:name=".QrScannerActivity"

@@ -17,12 +17,6 @@ class MainActivity : AppCompatActivity() {
         if (isFinishing || isDestroyed || technicalAreaOpened) return@Runnable
 
         technicalAreaOpened = true
-        AppLog.info(
-            this,
-            category = "TECNICO",
-            event = "TECHNICAL_AREA_OPENED",
-            message = "Área técnica aberta pelo toque prolongado na versão"
-        )
         startActivity(Intent(this, TechnicalAreaActivity::class.java))
     }
 
