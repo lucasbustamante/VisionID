@@ -1,4 +1,4 @@
-# As APIs dos fabricantes são acessadas por reflexão para suportar firmwares diferentes.
+# Preserva callbacks e implementacoes internas carregadas pelo MESDK Newland.
 -keep class com.newland.** { *; }
 -dontwarn com.newland.**
 -keep class com.xcheng.printerservice.** { *; }

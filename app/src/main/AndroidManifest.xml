@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- Permissao de hardware exigida pelo MESDK da impressora Newland. -->
+    <uses-permission android:name="android.permission.MANAGE_NEWLAND" />
+
     <!-- Fallback da impressora interna XCheng exposta como BluetoothPrinter. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />

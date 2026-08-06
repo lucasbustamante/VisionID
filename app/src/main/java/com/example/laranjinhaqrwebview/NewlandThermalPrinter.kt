@@ -3,618 +3,306 @@ package com.example.laranjinhaqrwebview
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
-import java.lang.reflect.Method
-import java.lang.reflect.Modifier
-import java.nio.charset.Charset
+import com.newland.sdk.me.ConnUtils
+import com.newland.sdk.mtype.Device
+import com.newland.sdk.mtype.ModuleType
+import com.newland.sdk.module.printer.Alignment
+import com.newland.sdk.module.printer.ErrorCode
+import com.newland.sdk.module.printer.FontSize
+import com.newland.sdk.module.printer.ImageFormat
+import com.newland.sdk.module.printer.PrintListener
+import com.newland.sdk.module.printer.PrinterModule
+import com.newland.sdk.module.printer.TextFormat
+import com.newland.sdk.module.printerPro.NAlignment
+import com.newland.sdk.module.printerPro.NImageFormat
+import com.newland.sdk.module.printerPro.NPrintErrorCode
+import com.newland.sdk.module.printerPro.NPrintListener
+import com.newland.sdk.module.printerPro.NPrinterModule
+import com.newland.sdk.module.printerPro.NTextFormat
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
-/**
- * Impressão para Newland N960K/N950/N910.
- *
- * O projeto inclui o MESDK 3.10.46. O acesso permanece por reflexão para
- * tolerar diferenças entre o SDK empacotado e versões presentes no firmware.
- */
+/** Impressao direta pela API oficial empacotada no MESDK Newland 3.10.46. */
 internal object NewlandThermalPrinter {
-    private const val BITMAP_CENTER_POSITION = 1
-    private data class LoaderEntry(val label: String, val loader: ClassLoader)
+    private const val BACKEND = "Newland MESDK 3.10.46"
+    private const val CALLBACK_TIMEOUT_SECONDS = 45L
+    private const val READY_TIMEOUT_MS = 5_000L
+    private const val PAPER_FEED_LINES = 4
+    private val sdkLock = Any()
 
-    fun print(context: Context, text: String): PrinterAttempt {
-        val loaders = classLoaders(context)
-        val details = mutableListOf<String>()
-
-        val strategies = listOf<Pair<String, () -> Boolean?>>(
-            "Newland MESDK" to { printMesdk(context, loaders, text, details) },
-            "Newland NSDK/Manager" to { printManagerFamilies(context, loaders, text, details) }
-        )
-
-        var apiFound = false
-        for ((name, strategy) in strategies) {
-            val result = runCatching(strategy).getOrElse {
-                details += "$name: ${rootCause(it)}"
-                null
-            }
-            if (result != null) {
-                apiFound = true
-                if (result) {
-                    return PrinterAttempt(
-                        available = true,
-                        success = true,
-                        backend = name,
-                        detail = "Comprovante aceito pela API Newland. ${details.joinToString(" | ").take(900)}"
+    fun print(context: Context, text: String): PrinterAttempt = synchronized(sdkLock) {
+        execute(context, "comprovante") { device, details ->
+            val standard = module<PrinterModule>(device, ModuleType.PRINTER, details)
+            if (standard != null) {
+                // O exemplo publico funcional da Newland usa o modulo de script PRINTER.
+                printTextLegacy(context.applicationContext, standard, text, details)
+                "PRINTER"
+            } else {
+                val pro = module<NPrinterModule>(device, ModuleType.PRINTER_PRO, details)
+                    ?: throw IllegalStateException(
+                        "O terminal nao disponibilizou PRINTER nem PRINTER_PRO."
                     )
-                }
-                details += "$name: API encontrada, mas não aceitou o comando."
+                printTextPro(pro, text, details)
+                "PRINTER_PRO"
             }
         }
-
-        return PrinterAttempt(
-            available = apiFound,
-            success = false,
-            backend = "Newland",
-            detail = details.joinToString(" | ").ifBlank {
-                "Nenhuma classe de impressão Newland foi localizada."
-            }.take(1900)
-        )
     }
 
-    fun printBitmap(context: Context, bitmap: Bitmap): PrinterAttempt {
-        val loaders = classLoaders(context)
-        val details = mutableListOf<String>()
-
-        val strategies = listOf<Pair<String, () -> Boolean?>>(
-            "Newland MESDK" to { printMesdkBitmap(context, loaders, bitmap, details) },
-            "Newland NSDK/Manager" to {
-                printManagerFamiliesBitmap(context, loaders, bitmap, details)
-            }
-        )
-
-        var apiFound = false
-        for ((name, strategy) in strategies) {
-            val result = runCatching(strategy).getOrElse {
-                details += "$name bitmap: ${rootCause(it)}"
-                null
-            }
-            if (result != null) {
-                apiFound = true
-                if (result) {
-                    return PrinterAttempt(
-                        available = true,
-                        success = true,
-                        backend = name,
-                        detail = buildString {
-                            append("Bitmap ")
-                            append(bitmap.width)
-                            append("x")
-                            append(bitmap.height)
-                            append(" aceito pela API Newland. ")
-                            append(details.joinToString(" | ").take(900))
-                        }
+    fun printBitmap(context: Context, bitmap: Bitmap): PrinterAttempt = synchronized(sdkLock) {
+        execute(context, "bitmap ${bitmap.width}x${bitmap.height}") { device, details ->
+            val standard = module<PrinterModule>(device, ModuleType.PRINTER, details)
+            if (standard != null) {
+                printBitmapLegacy(context.applicationContext, standard, bitmap, details)
+                "PRINTER"
+            } else {
+                val pro = module<NPrinterModule>(device, ModuleType.PRINTER_PRO, details)
+                    ?: throw IllegalStateException(
+                        "O terminal nao disponibilizou PRINTER nem PRINTER_PRO."
                     )
-                }
-                details += "$name: API encontrada, mas não aceitou o bitmap."
+                printBitmapPro(pro, bitmap, details)
+                "PRINTER_PRO"
             }
         }
-
-        return PrinterAttempt(
-            available = apiFound,
-            success = false,
-            backend = "Newland",
-            detail = details.joinToString(" | ").ifBlank {
-                "Nenhuma API Newland compatível com impressão de Bitmap foi localizada."
-            }.take(1900)
-        )
     }
 
-    private fun printMesdk(
+    private inline fun execute(
         context: Context,
-        loaders: List<LoaderEntry>,
-        text: String,
-        details: MutableList<String>
-    ): Boolean? {
-        val connLocated = loadFirst(loaders, "com.newland.me.ConnUtils") ?: run {
-            details += "MESDK: com.newland.me.ConnUtils ausente nos ${loaders.size} classloaders."
-            return null
-        }
-        details += "MESDK carregado por ${connLocated.first}."
-
-        val connUtils = connLocated.second
-        val getDeviceManager = connUtils.methods.firstOrNull {
-            Modifier.isStatic(it.modifiers) &&
-                it.name == "getDeviceManager" &&
-                it.parameterCount == 0
-        } ?: run {
-            details += "MESDK: getDeviceManager() ausente."
-            return false
-        }
-
-        val deviceManager = getDeviceManager.invoke(null) ?: run {
-            details += "MESDK: getDeviceManager() retornou null."
-            return false
-        }
-
-        var device = callValue(deviceManager, listOf("getDevice"))
-        if (device == null) {
-            details += "MESDK: device inicialmente null; tentando connect()."
-            runCatching { callOptional(deviceManager, listOf("connect")) }
-                .onFailure { details += "connect(): ${rootCause(it)}" }
-
-            val limit = SystemClock.elapsedRealtime() + 2_500L
-            while (device == null && SystemClock.elapsedRealtime() < limit) {
-                SystemClock.sleep(100)
-                device = callValue(deviceManager, listOf("getDevice"))
-            }
-        }
-
-        if (device == null) {
-            // Alguns builds expõem uma inicialização simples com Context.
-            runCatching {
-                callOptional(deviceManager, listOf("init", "initialize"), context.applicationContext)
-            }.onFailure { details += "init(Context): ${rootCause(it)}" }
-            runCatching { callOptional(deviceManager, listOf("connect")) }
-                .onFailure { details += "connect pós-init: ${rootCause(it)}" }
-            device = callValue(deviceManager, listOf("getDevice"))
-        }
-
-        val actualDevice = device ?: run {
-            details += "MESDK: o DeviceManager não disponibilizou o Device integrado."
-            return false
-        }
-
-        val moduleLocated = loadFirst(
-            loaders,
-            "com.newland.mtype.ModuleType",
-            "com.newland.me.ModuleType"
-        ) ?: run {
-            details += "MESDK: ModuleType ausente."
-            return false
-        }
-
-        val printerType = moduleLocated.second.enumConstants?.firstOrNull {
-            it.toString().equals("COMMON_PRINTER", true)
-        } ?: moduleLocated.second.enumConstants?.firstOrNull {
-            it.toString().contains("PRINTER", true)
-        } ?: run {
-            details += "MESDK: COMMON_PRINTER não encontrado."
-            return false
-        }
-
-        val printer = callValue(actualDevice, listOf("getStandardModule"), printerType)
-            ?: callValue(actualDevice, listOf("getModule", "getDeviceModule"), printerType)
-            ?: run {
-                details += "MESDK: módulo COMMON_PRINTER retornou null."
-                return false
-            }
-
-        callOptional(printer, listOf("init", "initialize", "open"))
-        val status = callValue(printer, listOf("getStatus", "getPrinterStatus", "status"))
-        details += "MESDK: printer=${printer.javaClass.name}; status=${status ?: "não informado"}."
-
-        val result = invokePrintMethod(printer, text)
-        details += "MESDK: retorno=${result?.toString()?.take(180) ?: "void/null"}."
-        return accepted(result)
-    }
-
-    private fun printManagerFamilies(
-        context: Context,
-        loaders: List<LoaderEntry>,
-        text: String,
-        details: MutableList<String>
-    ): Boolean? {
-        val located = loadFirst(
-            loaders,
-            "com.newland.nsdk.core.api.NSDKModuleManager",
-            "com.newland.nsdk.core.api.NSDKManager",
-            "com.newland.nsdk.core.api.NSDKModuleManagerImpl",
-            "com.newland.sdk.module.printer.PrinterManager",
-            "com.newland.sdk.printer.PrinterManager",
-            "com.newland.payment.printer.PrinterManager",
-            "com.newland.pospp.openapi.manager.NewlandPrinterManager",
-            "com.newland.pospp.openapi.manager.PrinterManager"
-        ) ?: return null
-
-        details += "Manager ${located.second.name} carregado por ${located.first}."
-        val manager = instance(located.second, context) ?: return false
-
-        callOptional(manager, listOf("init", "initialize", "open"), context.applicationContext)
-        callOptional(manager, listOf("init", "initialize", "open"))
-
-        val printer = callValue(manager, listOf("getPrinter", "getPrinterManager")) ?: manager
-        callOptional(printer, listOf("init", "initialize", "open", "reset"))
-        val result = invokePrintMethod(printer, text)
-        return accepted(result)
-    }
-
-    private fun printMesdkBitmap(
-        context: Context,
-        loaders: List<LoaderEntry>,
-        bitmap: Bitmap,
-        details: MutableList<String>
-    ): Boolean? {
-        val connLocated = loadFirst(loaders, "com.newland.me.ConnUtils") ?: run {
-            details += "MESDK bitmap: com.newland.me.ConnUtils ausente."
-            return null
-        }
-        details += "MESDK bitmap carregado por ${connLocated.first}."
-
-        val getDeviceManager = connLocated.second.methods.firstOrNull {
-            Modifier.isStatic(it.modifiers) &&
-                it.name == "getDeviceManager" &&
-                it.parameterCount == 0
-        } ?: run {
-            details += "MESDK bitmap: getDeviceManager() ausente."
-            return false
-        }
-
-        val deviceManager = getDeviceManager.invoke(null) ?: run {
-            details += "MESDK bitmap: getDeviceManager() retornou null."
-            return false
-        }
-
-        var device = callValue(deviceManager, listOf("getDevice"))
-        if (device == null) {
-            runCatching { callOptional(deviceManager, listOf("connect")) }
-                .onFailure { details += "MESDK bitmap connect(): ${rootCause(it)}" }
-
-            val limit = SystemClock.elapsedRealtime() + 2_500L
-            while (device == null && SystemClock.elapsedRealtime() < limit) {
-                SystemClock.sleep(100)
-                device = callValue(deviceManager, listOf("getDevice"))
-            }
-        }
-
-        if (device == null) {
-            runCatching {
-                callOptional(deviceManager, listOf("init", "initialize"), context.applicationContext)
-            }.onFailure { details += "MESDK bitmap init(Context): ${rootCause(it)}" }
-            runCatching { callOptional(deviceManager, listOf("connect")) }
-                .onFailure { details += "MESDK bitmap connect pós-init: ${rootCause(it)}" }
-            device = callValue(deviceManager, listOf("getDevice"))
-        }
-
-        val actualDevice = device ?: run {
-            details += "MESDK bitmap: Device integrado indisponível."
-            return false
-        }
-
-        val moduleLocated = loadFirst(
-            loaders,
-            "com.newland.mtype.ModuleType",
-            "com.newland.me.ModuleType"
-        ) ?: run {
-            details += "MESDK bitmap: ModuleType ausente."
-            return false
-        }
-
-        val printerType = moduleLocated.second.enumConstants?.firstOrNull {
-            it.toString().equals("COMMON_PRINTER", true)
-        } ?: moduleLocated.second.enumConstants?.firstOrNull {
-            it.toString().contains("PRINTER", true)
-        } ?: run {
-            details += "MESDK bitmap: COMMON_PRINTER não encontrado."
-            return false
-        }
-
-        val printer = callValue(actualDevice, listOf("getStandardModule"), printerType)
-            ?: callValue(actualDevice, listOf("getModule", "getDeviceModule"), printerType)
-            ?: run {
-                details += "MESDK bitmap: módulo COMMON_PRINTER retornou null."
-                return false
-            }
-
-        callOptional(printer, listOf("init", "initialize", "open"))
-        val status = callValue(printer, listOf("getStatus", "getPrinterStatus", "status"))
-        details += "MESDK bitmap: printer=${printer.javaClass.name}; status=${status ?: "não informado"}."
-
-        val result = invokeBitmapPrintMethod(printer, bitmap)
-        details += "MESDK bitmap: retorno=${result?.toString()?.take(180) ?: "void/null"}."
-        return accepted(result)
-    }
-
-    private fun printManagerFamiliesBitmap(
-        context: Context,
-        loaders: List<LoaderEntry>,
-        bitmap: Bitmap,
-        details: MutableList<String>
-    ): Boolean? {
-        val located = loadFirst(
-            loaders,
-            "com.newland.nsdk.core.api.NSDKModuleManager",
-            "com.newland.nsdk.core.api.NSDKManager",
-            "com.newland.nsdk.core.api.NSDKModuleManagerImpl",
-            "com.newland.sdk.module.printer.PrinterManager",
-            "com.newland.sdk.printer.PrinterManager",
-            "com.newland.payment.printer.PrinterManager",
-            "com.newland.pospp.openapi.manager.NewlandPrinterManager",
-            "com.newland.pospp.openapi.manager.PrinterManager"
-        ) ?: return null
-
-        details += "Manager bitmap ${located.second.name} carregado por ${located.first}."
-        val manager = instance(located.second, context) ?: return false
-        callOptional(manager, listOf("init", "initialize", "open"), context.applicationContext)
-        callOptional(manager, listOf("init", "initialize", "open"))
-
-        val printer = callValue(manager, listOf("getPrinter", "getPrinterManager")) ?: manager
-        callOptional(printer, listOf("init", "initialize", "open", "reset"))
-        val result = invokeBitmapPrintMethod(printer, bitmap)
-        return accepted(result)
-    }
-
-    private fun invokeBitmapPrintMethod(target: Any, bitmap: Bitmap): Any? {
-        val methods = target.javaClass.methods.toList()
-        val names = setOf("print", "printBitmap", "printBitMap", "printImage", "addImage")
-
-        // Assinatura confirmada no MESDK usado pela família N9xx:
-        // PrinterResult print(int position, Bitmap bitmap, long timeout, TimeUnit unit)
-        methods.firstOrNull { method ->
-            method.name in names &&
-                method.parameterCount == 4 &&
-                isIntegerType(method.parameterTypes[0]) &&
-                method.parameterTypes[1].isAssignableFrom(Bitmap::class.java) &&
-                isNumericType(method.parameterTypes[2]) &&
-                TimeUnit::class.java.isAssignableFrom(method.parameterTypes[3])
-        }?.let { method ->
-            return method.invoke(
-                target,
-                numericValue(method.parameterTypes[0], BITMAP_CENTER_POSITION),
-                bitmap,
-                numericTimeout(method.parameterTypes[2]),
-                TimeUnit.SECONDS
+        job: String,
+        operation: (Device, MutableList<String>) -> String
+    ): PrinterAttempt {
+        val details = mutableListOf<String>()
+        return try {
+            val device = connectedDevice(context.applicationContext, details)
+            val module = operation(device, details)
+            PrinterAttempt(
+                available = true,
+                success = true,
+                backend = BACKEND,
+                detail = "$job concluido via $module. ${details.joinToString(" | ").take(1_500)}"
+            )
+        } catch (error: Throwable) {
+            val cause = rootCause(error)
+            details += cause
+            PrinterAttempt(
+                available = true,
+                success = false,
+                backend = BACKEND,
+                detail = "$job falhou: ${details.joinToString(" | ").take(2_200)}"
             )
         }
-
-        methods.firstOrNull { method ->
-            method.name in names &&
-                method.parameterCount == 3 &&
-                method.parameterTypes[0].isAssignableFrom(Bitmap::class.java) &&
-                isNumericType(method.parameterTypes[1]) &&
-                TimeUnit::class.java.isAssignableFrom(method.parameterTypes[2])
-        }?.let { method ->
-            return method.invoke(
-                target,
-                bitmap,
-                numericTimeout(method.parameterTypes[1]),
-                TimeUnit.SECONDS
-            )
-        }
-
-        methods.firstOrNull { method ->
-            method.name in names &&
-                method.parameterCount == 2 &&
-                isIntegerType(method.parameterTypes[0]) &&
-                method.parameterTypes[1].isAssignableFrom(Bitmap::class.java)
-        }?.let { method ->
-            return method.invoke(
-                target,
-                numericValue(method.parameterTypes[0], BITMAP_CENTER_POSITION),
-                bitmap
-            )
-        }
-
-        methods.firstOrNull { method ->
-            method.name in names &&
-                method.parameterTypes.contentEquals(arrayOf(Bitmap::class.java))
-        }?.let { method ->
-            return method.invoke(target, bitmap)
-        }
-
-        throw NoSuchMethodException(
-            "Nenhum método de bitmap compatível em ${target.javaClass.name}. Métodos: " +
-                methods.filter {
-                    it.name.contains("print", true) || it.name.contains("image", true)
-                }.joinToString { method ->
-                    "${method.name}(${method.parameterTypes.joinToString { it.simpleName }})"
-                }.take(900)
-        )
     }
 
-    private fun isIntegerType(type: Class<*>): Boolean =
-        type == Int::class.javaPrimitiveType ||
-            type == Int::class.javaObjectType ||
-            type == Short::class.javaPrimitiveType ||
-            type == Short::class.javaObjectType ||
-            type == Byte::class.javaPrimitiveType ||
-            type == Byte::class.javaObjectType
+    private fun connectedDevice(context: Context, details: MutableList<String>): Device {
+        val manager = ConnUtils.getDeviceManager()
+        details += "sdk=${runCatching { manager.sdkVersion }.getOrNull() ?: "3.10.46"}"
+        details += "estado-inicial=${runCatching { manager.deviceConnState }.getOrNull()}"
 
-    private fun isNumericType(type: Class<*>): Boolean =
-        isIntegerType(type) ||
-            type == Long::class.javaPrimitiveType ||
-            type == Long::class.javaObjectType ||
-            type == Float::class.javaPrimitiveType ||
-            type == Float::class.javaObjectType ||
-            type == Double::class.javaPrimitiveType ||
-            type == Double::class.javaObjectType
-
-    private fun numericValue(type: Class<*>, value: Int): Any = when (type) {
-        Byte::class.javaPrimitiveType, Byte::class.javaObjectType -> value.toByte()
-        Short::class.javaPrimitiveType, Short::class.javaObjectType -> value.toShort()
-        Long::class.javaPrimitiveType, Long::class.javaObjectType -> value.toLong()
-        else -> value
-    }
-
-    private fun invokePrintMethod(target: Any, text: String): Any? {
-        val methods = target.javaClass.methods.toList()
-        val textNames = setOf("printText", "printString", "printStr", "addText", "appendText", "print")
-
-        methods.firstOrNull {
-            it.name in textNames &&
-                it.parameterTypes.contentEquals(arrayOf(String::class.java))
-        }?.let { return it.invoke(target, text) }
-
-        // Assinatura confirmada no MESDK:
-        // PrinterResult print(String data, long timeout, TimeUnit unit)
-        methods.firstOrNull {
-            it.name == "print" &&
-                it.parameterCount == 3 &&
-                it.parameterTypes[0] == String::class.java &&
-                TimeUnit::class.java.isAssignableFrom(it.parameterTypes[2])
-        }?.let { method ->
-            return method.invoke(
-                target,
-                text,
-                numericTimeout(method.parameterTypes[1]),
-                TimeUnit.SECONDS
-            )
+        var device = runCatching { manager.device }.getOrNull()
+        val alive = device?.let { runCatching { it.isAlive }.getOrDefault(false) } == true
+        if (!alive) {
+            // A ordem e obrigatoria no MESDK: init(Context), connect(), getDevice().
+            manager.init(context)
+            val connected = manager.connect()
+            details += "connect=$connected"
+            device = manager.device
         }
 
-        val bytes = text.toByteArray(
-            runCatching { Charset.forName("GBK") }.getOrDefault(Charsets.UTF_8)
-        )
-
-        methods.firstOrNull {
-            it.name in textNames &&
-                it.parameterTypes.contentEquals(arrayOf(ByteArray::class.java))
-        }?.let { return it.invoke(target, bytes) }
-
-        methods.firstOrNull {
-            it.name == "print" &&
-                it.parameterCount == 3 &&
-                it.parameterTypes[0] == ByteArray::class.java &&
-                TimeUnit::class.java.isAssignableFrom(it.parameterTypes[2])
-        }?.let { method ->
-            return method.invoke(
-                target,
-                bytes,
-                numericTimeout(method.parameterTypes[1]),
-                TimeUnit.SECONDS
-            )
+        val connectedDevice = device
+            ?: throw IllegalStateException("DeviceManager conectou sem fornecer o Device integrado.")
+        if (!runCatching { connectedDevice.isAlive }.getOrDefault(true)) {
+            throw IllegalStateException("O Device Newland foi criado, mas nao esta ativo.")
         }
 
-        throw NoSuchMethodException(
-            "Nenhum método de texto compatível em ${target.javaClass.name}. Métodos: " +
-                methods.filter { it.name.contains("print", true) }
-                    .joinToString { "${it.name}/${it.parameterCount}" }
-                    .take(600)
-        )
-    }
-
-    private fun classLoaders(context: Context): List<LoaderEntry> {
-        val result = linkedMapOf<String, ClassLoader>()
-        fun add(label: String, loader: ClassLoader?) {
-            if (loader != null && result.values.none { it === loader }) result[label] = loader
-        }
-
-        add("aplicativo", context.classLoader)
-        add("thread", Thread.currentThread().contextClassLoader)
-        add("NewlandThermalPrinter", NewlandThermalPrinter::class.java.classLoader)
-
-        val packageNames = runCatching {
-            @Suppress("DEPRECATION")
-            context.packageManager.getInstalledApplications(0)
-                .map { it.packageName }
-                .filter {
-                    it.contains("newland", true) ||
-                        it.contains("printer", true) ||
-                        it.contains("mesdk", true) ||
-                        it.contains("nsdk", true)
-                }
-                .take(40)
-        }.getOrDefault(emptyList())
-
-        packageNames.forEach { packageName ->
-            runCatching {
-                val packageContext = context.createPackageContext(
-                    packageName,
-                    Context.CONTEXT_INCLUDE_CODE or Context.CONTEXT_IGNORE_SECURITY
-                )
-                add("pacote:$packageName", packageContext.classLoader)
-            }
-        }
-
-        return result.map { LoaderEntry(it.key, it.value) }
-    }
-
-    private fun loadFirst(
-        loaders: List<LoaderEntry>,
-        vararg names: String
-    ): Pair<String, Class<*>>? {
-        loaders.forEach { entry ->
-            names.forEach { name ->
-                runCatching { Class.forName(name, true, entry.loader) }
-                    .getOrNull()
-                    ?.let { return entry.label to it }
-            }
-        }
-        return null
-    }
-
-    private fun numericTimeout(parameter: Class<*>): Any = when (parameter) {
-        Int::class.javaPrimitiveType, Int::class.javaObjectType -> 30
-        Short::class.javaPrimitiveType, Short::class.javaObjectType -> 30.toShort()
-        Float::class.javaPrimitiveType, Float::class.javaObjectType -> 30f
-        Double::class.javaPrimitiveType, Double::class.javaObjectType -> 30.0
-        else -> 30L
-    }
-
-    private fun accepted(value: Any?): Boolean = when (value) {
-        null -> true
-        is Boolean -> value
-        is Number -> value.toInt() >= 0
-        else -> {
-            val description = value.toString()
-            !description.contains("FAIL", true) &&
-                !description.contains("ERROR", true) &&
-                !description.contains("EXCEPTION", true)
-        }
-    }
-
-    private fun instance(clazz: Class<*>, context: Context): Any? {
-        for (name in listOf("getInstance", "get", "instance", "newInstance")) {
-            clazz.methods.filter {
-                Modifier.isStatic(it.modifiers) && it.name == name
-            }.forEach { method ->
-                runCatching {
-                    when (method.parameterCount) {
-                        0 -> method.invoke(null)
-                        1 -> if (Context::class.java.isAssignableFrom(method.parameterTypes[0])) {
-                            method.invoke(null, context.applicationContext)
-                        } else null
-                        else -> null
-                    }
-                }.getOrNull()?.let { return it }
-            }
-        }
-
-        return runCatching {
-            clazz.getDeclaredConstructor(Context::class.java)
-                .newInstance(context.applicationContext)
-        }.recoverCatching {
-            clazz.getDeclaredConstructor().newInstance()
+        val supported = runCatching {
+            connectedDevice.supportStandardModule.joinToString(",") { it.name }
         }.getOrNull()
+        if (!supported.isNullOrBlank()) details += "modulos=$supported"
+        details += "estado-final=${runCatching { manager.deviceConnState }.getOrNull()}"
+        return connectedDevice
     }
 
-    private fun callOptional(target: Any, names: List<String>, vararg args: Any): Boolean {
-        val method = compatibleMethod(target.javaClass.methods.toList(), names, args) ?: return false
-        method.isAccessible = true
-        method.invoke(target, *args)
-        return true
+    private inline fun <reified T> module(
+        device: Device,
+        type: ModuleType,
+        details: MutableList<String>
+    ): T? {
+        val supported = runCatching { device.supportStandardModule.toSet() }.getOrNull()
+        if (!supported.isNullOrEmpty() && type !in supported) {
+            details += "$type nao anunciado pelo firmware"
+            return null
+        }
+
+        val value = runCatching { device.getStandardModule(type) }
+            .onFailure { details += "$type indisponivel: ${rootCause(it)}" }
+            .getOrNull()
+            ?: return null
+        if (value !is T) {
+            details += "$type retornou ${value.javaClass.name}, esperado ${T::class.java.name}"
+            return null
+        }
+        details += "$type=${value.javaClass.name}"
+        return value
     }
 
-    private fun callValue(target: Any, names: List<String>, vararg args: Any): Any? {
-        val method = compatibleMethod(target.javaClass.methods.toList(), names, args) ?: return null
-        method.isAccessible = true
-        return method.invoke(target, *args)
-    }
+    private fun printTextPro(
+        printer: NPrinterModule,
+        text: String,
+        details: MutableList<String>
+    ) {
+        awaitReady("PRINTER_PRO", details) { printer.status.name }
+        val format = NTextFormat.Builder()
+            .content(text)
+            .fontSize(24)
+            .alignment(NAlignment.LEFT)
+            .marginBottom(0)
+            .create()
+        printer.addText(format)
+        printer.addPaperFeed(PAPER_FEED_LINES)
 
-    private fun compatibleMethod(
-        methods: List<Method>,
-        names: List<String>,
-        args: Array<out Any>
-    ): Method? = methods.firstOrNull { method ->
-        method.name in names &&
-            method.parameterCount == args.size &&
-            method.parameterTypes.indices.all { index ->
-                compatible(method.parameterTypes[index], args[index].javaClass)
+        val result = AsyncPrintResult()
+        printer.startPrint(object : NPrintListener {
+            override fun onSuccess() = result.success()
+
+            override fun onError(errorCode: NPrintErrorCode?, message: String?) {
+                result.failure("${errorCode?.name ?: "FAILED"}: ${message.orEmpty()}")
             }
+        })
+        result.await("PRINTER_PRO", details)
     }
 
-    private fun compatible(parameter: Class<*>, value: Class<*>): Boolean {
-        if (parameter.isAssignableFrom(value)) return true
-        return when (parameter) {
-            Int::class.javaPrimitiveType -> value == Int::class.javaObjectType
-            Long::class.javaPrimitiveType ->
-                value == Long::class.javaObjectType || value == Int::class.javaObjectType
-            Boolean::class.javaPrimitiveType -> value == Boolean::class.javaObjectType
-            else -> false
+    private fun printBitmapPro(
+        printer: NPrinterModule,
+        bitmap: Bitmap,
+        details: MutableList<String>
+    ) {
+        awaitReady("PRINTER_PRO", details) { printer.status.name }
+        val format = NImageFormat.Builder()
+            .bitmap(bitmap)
+            .width(bitmap.width)
+            .height(bitmap.height)
+            .alignment(NAlignment.CENTER)
+            .create()
+        printer.addImage(format)
+        printer.addPaperFeed(PAPER_FEED_LINES)
+
+        val result = AsyncPrintResult()
+        printer.startPrint(object : NPrintListener {
+            override fun onSuccess() = result.success()
+
+            override fun onError(errorCode: NPrintErrorCode?, message: String?) {
+                result.failure("${errorCode?.name ?: "FAILED"}: ${message.orEmpty()}")
+            }
+        })
+        result.await("PRINTER_PRO bitmap", details)
+    }
+
+    private fun printTextLegacy(
+        context: Context,
+        printer: PrinterModule,
+        text: String,
+        details: MutableList<String>
+    ) {
+        awaitReady("PRINTER", details) { printer.status.name }
+        val script = printer.getPrintScriptUtil(context)
+        script.reset()
+        val format = TextFormat().apply {
+            fontSize = FontSize.NORMAL
+            alignment = Alignment.LEFT
+            isLinefeed = true
+        }
+        script.addText(format, text)
+        script.addPaperFeed(PAPER_FEED_LINES)
+
+        val result = AsyncPrintResult()
+        script.print(object : PrintListener {
+            override fun onSuccess() = result.success()
+
+            override fun onError(errorCode: ErrorCode?, message: String?) {
+                result.failure("${errorCode?.name ?: "FAILED"}: ${message.orEmpty()}")
+            }
+        })
+        result.await("PRINTER", details)
+    }
+
+    private fun printBitmapLegacy(
+        context: Context,
+        printer: PrinterModule,
+        bitmap: Bitmap,
+        details: MutableList<String>
+    ) {
+        awaitReady("PRINTER", details) { printer.status.name }
+        val script = printer.getPrintScriptUtil(context)
+        script.reset()
+        val format = ImageFormat().apply {
+            width = bitmap.width
+            height = bitmap.height
+            offset = 0
+            alignment = Alignment.CENTER
+        }
+        script.addImage(format, bitmap)
+        script.addPaperFeed(PAPER_FEED_LINES)
+
+        val result = AsyncPrintResult()
+        script.print(object : PrintListener {
+            override fun onSuccess() = result.success()
+
+            override fun onError(errorCode: ErrorCode?, message: String?) {
+                result.failure("${errorCode?.name ?: "FAILED"}: ${message.orEmpty()}")
+            }
+        })
+        result.await("PRINTER bitmap", details)
+    }
+
+    private fun awaitReady(
+        module: String,
+        details: MutableList<String>,
+        status: () -> String
+    ) {
+        val deadline = SystemClock.elapsedRealtime() + READY_TIMEOUT_MS
+        var current = status()
+        while (current.equals("BUSY", true) && SystemClock.elapsedRealtime() < deadline) {
+            SystemClock.sleep(150)
+            current = status()
+        }
+        details += "$module status=$current"
+        if (!current.equals("NORMAL", true)) {
+            throw IllegalStateException("Impressora Newland indisponivel: ${statusMessage(current)}")
+        }
+    }
+
+    private fun statusMessage(status: String): String = when (status.uppercase()) {
+        "OUTOF_PAPER" -> "sem papel"
+        "OVER_HEAT" -> "superaquecida"
+        "LOW_VOLTAGE" -> "tensao baixa"
+        "BUSY" -> "ocupada"
+        "DESTROYED" -> "modulo encerrado"
+        "PPSERR" -> "falha do mecanismo de impressao"
+        "CUTTER_ERROR" -> "falha do cortador"
+        else -> status
+    }
+
+    private class AsyncPrintResult {
+        private val completed = CountDownLatch(1)
+        private val error = AtomicReference<String?>()
+
+        fun success() {
+            completed.countDown()
+        }
+
+        fun failure(message: String) {
+            error.compareAndSet(null, message)
+            completed.countDown()
+        }
+
+        fun await(module: String, details: MutableList<String>) {
+            if (!completed.await(CALLBACK_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                throw IllegalStateException(
+                    "$module nao confirmou a impressao em $CALLBACK_TIMEOUT_SECONDS segundos."
+                )
+            }
+            error.get()?.let { throw IllegalStateException("$module retornou $it") }
+            details += "$module callback=sucesso"
         }
     }
 

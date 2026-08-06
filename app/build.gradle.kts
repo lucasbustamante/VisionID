@@ -25,7 +25,7 @@ android {
         applicationId = "com.example.laranjinhaqrwebview"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
+        versionCode = 14
         versionName = "1.5"
         manifestPlaceholders["cleartextTrafficPermitted"] = "false"
     }
@@ -110,7 +110,7 @@ dependencies {
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
-    // MESDK Newland 3.10.46, usado no N960K. O commit é fixo para
-    // evitar que o build mude quando o repositório for atualizado.
-    implementation("com.github.lion0508:Newland_MESDK:4f0fc6d")
+    // A publicacao JitPack desse repositorio gera um JAR vazio. O AAR real,
+    // fixado pelo SHA-256 documentado no README, fica local para build reproduzivel.
+    implementation(files("libs/MESDK-3.10.46-RELEASE.aar"))
 }
