@@ -47,7 +47,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="22dp"
             android:gravity="center"
-            android:text="Selecione uma ferramenta para diagnóstico do equipamento."
+            android:text="Selecione uma ferramenta para diagnóstico do equipamento"
             android:textColor="@color/white"
             android:textSize="15sp" />
 

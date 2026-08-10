@@ -27,13 +27,14 @@ internal object PrinterDiagnostics {
                 .joinToString(",")
         }.getOrDefault("não permitido pelo firmware")
 
-        val mesdkClass = runCatching {
-            Class.forName("com.newland.me.ConnUtils").protectionDomain?.codeSource?.location?.toString()
+        val nsdkManagerClass = runCatching {
+            Class.forName("com.newland.nsdk.core.internal.NSDKModuleManagerImpl")
+                .protectionDomain?.codeSource?.location?.toString()
                 ?: "presente"
         }.getOrDefault("ausente")
 
-        val moduleTypeClass = runCatching {
-            Class.forName("com.newland.mtype.ModuleType").name
+        val nsdkPrinterClass = runCatching {
+            Class.forName("com.newland.nsdk.core.api.internal.printer.Printer").name
         }.getOrDefault("ausente")
 
         return linkedMapOf(
@@ -45,8 +46,8 @@ internal object PrinterDiagnostics {
             "android" to Build.VERSION.RELEASE,
             "sdk" to Build.VERSION.SDK_INT.toString(),
             "xchengService" to (xcheng?.let { "${it.packageName}/${it.name}" } ?: "ausente"),
-            "newlandConnUtils" to mesdkClass,
-            "newlandModuleType" to moduleTypeClass,
+            "newlandNsdkManager" to nsdkManagerClass,
+            "newlandNsdkPrinter" to nsdkPrinterClass,
             "printerPackages" to installedMatches
         )
     }

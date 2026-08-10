@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -8,8 +9,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-    <!-- Permissao de hardware exigida pelo MESDK da impressora Newland. -->
-    <uses-permission android:name="android.permission.MANAGE_NEWLAND" />
+    <!-- O NSDK inclui localizacao para modulos Bluetooth nao usados pelo app. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
 
     <!-- Fallback da impressora interna XCheng exposta como BluetoothPrinter. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />

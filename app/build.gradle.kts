@@ -110,7 +110,7 @@ dependencies {
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
-    // A publicacao JitPack desse repositorio gera um JAR vazio. O AAR real,
-    // fixado pelo SHA-256 documentado no README, fica local para build reproduzivel.
-    implementation(files("libs/MESDK-3.10.46-RELEASE.aar"))
+    // API Newland sem permissoes privilegiadas. O AAR e mantido local e seu
+    // SHA-256 esta documentado no README para tornar o build reproduzivel.
+    implementation(files("libs/NewlandNsdk-2.8.0.aar"))
 }

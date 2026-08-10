@@ -2,66 +2,67 @@ package com.example.laranjinhaqrwebview
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.os.Build
 import android.os.SystemClock
-import com.newland.sdk.me.ConnUtils
-import com.newland.sdk.mtype.Device
-import com.newland.sdk.mtype.ModuleType
-import com.newland.sdk.module.printer.Alignment
-import com.newland.sdk.module.printer.ErrorCode
-import com.newland.sdk.module.printer.FontSize
-import com.newland.sdk.module.printer.ImageFormat
-import com.newland.sdk.module.printer.PrintListener
-import com.newland.sdk.module.printer.PrinterModule
-import com.newland.sdk.module.printer.TextFormat
-import com.newland.sdk.module.printerPro.NAlignment
-import com.newland.sdk.module.printerPro.NImageFormat
-import com.newland.sdk.module.printerPro.NPrintErrorCode
-import com.newland.sdk.module.printerPro.NPrintListener
-import com.newland.sdk.module.printerPro.NPrinterModule
-import com.newland.sdk.module.printerPro.NTextFormat
+import com.newland.nsdk.core.api.common.ModuleType
+import com.newland.nsdk.core.api.internal.printer.Printer
+import com.newland.nsdk.core.api.internal.printer.PrinterStatus
+import com.newland.nsdk.core.api.internal.printer.PrintingResultListener
+import com.newland.nsdk.core.internal.NSDKModuleManagerImpl
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.ceil
+import kotlin.math.max
 
-/** Impressao direta pela API oficial empacotada no MESDK Newland 3.10.46. */
+/** Impressao da familia N960 pela API NSDK, sem permissao privilegiada Newland. */
 internal object NewlandThermalPrinter {
-    private const val BACKEND = "Newland MESDK 3.10.46"
-    private const val CALLBACK_TIMEOUT_SECONDS = 45L
+    private const val BACKEND = "Newland NSDK 2.8.0"
+    private const val PAPER_WIDTH_PX = 384
+    private const val HORIZONTAL_MARGIN_PX = 10f
+    private const val PAGE_CONTENT_HEIGHT_PX = 720
+    private const val BOTTOM_FEED_PX = 80
+    private const val CALLBACK_TIMEOUT_SECONDS = 60L
     private const val READY_TIMEOUT_MS = 5_000L
-    private const val PAPER_FEED_LINES = 4
+    private const val RESULT_SUCCESS = 0
+    private const val RESULT_BUSY = 8
+
     private val sdkLock = Any()
 
-    fun print(context: Context, text: String): PrinterAttempt = synchronized(sdkLock) {
-        execute(context, "comprovante") { device, details ->
-            val standard = module<PrinterModule>(device, ModuleType.PRINTER, details)
-            if (standard != null) {
-                // O exemplo publico funcional da Newland usa o modulo de script PRINTER.
-                printTextLegacy(context.applicationContext, standard, text, details)
-                "PRINTER"
-            } else {
-                val pro = module<NPrinterModule>(device, ModuleType.PRINTER_PRO, details)
-                    ?: throw IllegalStateException(
-                        "O terminal nao disponibilizou PRINTER nem PRINTER_PRO."
-                    )
-                printTextPro(pro, text, details)
-                "PRINTER_PRO"
+    @Volatile
+    private var cachedPrinter: Printer? = null
+
+    fun print(context: Context, text: String): PrinterAttempt {
+        unavailableAttempt()?.let { return it }
+        return synchronized(sdkLock) {
+            execute(context, "comprovante") { printer, details ->
+                val pages = renderTextPages(text)
+                try {
+                    pages.forEachIndexed { index, page ->
+                        printImage(printer, page, "pagina ${index + 1}/${pages.size}", details)
+                    }
+                } finally {
+                    pages.forEach(Bitmap::recycle)
+                }
             }
         }
     }
 
-    fun printBitmap(context: Context, bitmap: Bitmap): PrinterAttempt = synchronized(sdkLock) {
-        execute(context, "bitmap ${bitmap.width}x${bitmap.height}") { device, details ->
-            val standard = module<PrinterModule>(device, ModuleType.PRINTER, details)
-            if (standard != null) {
-                printBitmapLegacy(context.applicationContext, standard, bitmap, details)
-                "PRINTER"
-            } else {
-                val pro = module<NPrinterModule>(device, ModuleType.PRINTER_PRO, details)
-                    ?: throw IllegalStateException(
-                        "O terminal nao disponibilizou PRINTER nem PRINTER_PRO."
-                    )
-                printBitmapPro(pro, bitmap, details)
-                "PRINTER_PRO"
+    fun printBitmap(context: Context, bitmap: Bitmap): PrinterAttempt {
+        unavailableAttempt()?.let { return it }
+        return synchronized(sdkLock) {
+            execute(context, "bitmap ${bitmap.width}x${bitmap.height}") { printer, details ->
+                val printable = withBottomFeed(bitmap)
+                try {
+                    printImage(printer, printable, "imagem", details)
+                } finally {
+                    printable.recycle()
+                }
             }
         }
     }
@@ -69,21 +70,20 @@ internal object NewlandThermalPrinter {
     private inline fun execute(
         context: Context,
         job: String,
-        operation: (Device, MutableList<String>) -> String
+        operation: (Printer, MutableList<String>) -> Unit
     ): PrinterAttempt {
         val details = mutableListOf<String>()
         return try {
-            val device = connectedDevice(context.applicationContext, details)
-            val module = operation(device, details)
+            val printer = printer(context.applicationContext, details)
+            operation(printer, details)
             PrinterAttempt(
                 available = true,
                 success = true,
                 backend = BACKEND,
-                detail = "$job concluido via $module. ${details.joinToString(" | ").take(1_500)}"
+                detail = "$job concluido. ${details.joinToString(" | ").take(1_500)}"
             )
         } catch (error: Throwable) {
-            val cause = rootCause(error)
-            details += cause
+            details += rootCause(error)
             PrinterAttempt(
                 available = true,
                 success = false,
@@ -93,216 +93,197 @@ internal object NewlandThermalPrinter {
         }
     }
 
-    private fun connectedDevice(context: Context, details: MutableList<String>): Device {
-        val manager = ConnUtils.getDeviceManager()
-        details += "sdk=${runCatching { manager.sdkVersion }.getOrNull() ?: "3.10.46"}"
-        details += "estado-inicial=${runCatching { manager.deviceConnState }.getOrNull()}"
-
-        var device = runCatching { manager.device }.getOrNull()
-        val alive = device?.let { runCatching { it.isAlive }.getOrDefault(false) } == true
-        if (!alive) {
-            // A ordem e obrigatoria no MESDK: init(Context), connect(), getDevice().
-            manager.init(context)
-            val connected = manager.connect()
-            details += "connect=$connected"
-            device = manager.device
+    private fun printer(context: Context, details: MutableList<String>): Printer {
+        cachedPrinter?.let {
+            details += "modulo=${it.javaClass.name} (cache)"
+            return it
         }
 
-        val connectedDevice = device
-            ?: throw IllegalStateException("DeviceManager conectou sem fornecer o Device integrado.")
-        if (!runCatching { connectedDevice.isAlive }.getOrDefault(true)) {
-            throw IllegalStateException("O Device Newland foi criado, mas nao esta ativo.")
-        }
-
-        val supported = runCatching {
-            connectedDevice.supportStandardModule.joinToString(",") { it.name }
-        }.getOrNull()
-        if (!supported.isNullOrBlank()) details += "modulos=$supported"
-        details += "estado-final=${runCatching { manager.deviceConnState }.getOrNull()}"
-        return connectedDevice
+        val manager = NSDKModuleManagerImpl.getInstance()
+        manager.init(context)
+        val module = manager.getModule(ModuleType.PRINTER)
+            ?: throw IllegalStateException("O firmware nao disponibilizou o modulo PRINTER do NSDK.")
+        val printer = module as? Printer
+            ?: throw IllegalStateException(
+                "PRINTER retornou ${module.javaClass.name}, esperado ${Printer::class.java.name}."
+            )
+        cachedPrinter = printer
+        details += "modulo=${printer.javaClass.name}"
+        return printer
     }
 
-    private inline fun <reified T> module(
-        device: Device,
-        type: ModuleType,
-        details: MutableList<String>
-    ): T? {
-        val supported = runCatching { device.supportStandardModule.toSet() }.getOrNull()
-        if (!supported.isNullOrEmpty() && type !in supported) {
-            details += "$type nao anunciado pelo firmware"
-            return null
-        }
-
-        val value = runCatching { device.getStandardModule(type) }
-            .onFailure { details += "$type indisponivel: ${rootCause(it)}" }
-            .getOrNull()
-            ?: return null
-        if (value !is T) {
-            details += "$type retornou ${value.javaClass.name}, esperado ${T::class.java.name}"
-            return null
-        }
-        details += "$type=${value.javaClass.name}"
-        return value
-    }
-
-    private fun printTextPro(
-        printer: NPrinterModule,
-        text: String,
-        details: MutableList<String>
-    ) {
-        awaitReady("PRINTER_PRO", details) { printer.status.name }
-        val format = NTextFormat.Builder()
-            .content(text)
-            .fontSize(24)
-            .alignment(NAlignment.LEFT)
-            .marginBottom(0)
-            .create()
-        printer.addText(format)
-        printer.addPaperFeed(PAPER_FEED_LINES)
-
-        val result = AsyncPrintResult()
-        printer.startPrint(object : NPrintListener {
-            override fun onSuccess() = result.success()
-
-            override fun onError(errorCode: NPrintErrorCode?, message: String?) {
-                result.failure("${errorCode?.name ?: "FAILED"}: ${message.orEmpty()}")
-            }
-        })
-        result.await("PRINTER_PRO", details)
-    }
-
-    private fun printBitmapPro(
-        printer: NPrinterModule,
+    private fun printImage(
+        printer: Printer,
         bitmap: Bitmap,
+        label: String,
         details: MutableList<String>
     ) {
-        awaitReady("PRINTER_PRO", details) { printer.status.name }
-        val format = NImageFormat.Builder()
-            .bitmap(bitmap)
-            .width(bitmap.width)
-            .height(bitmap.height)
-            .alignment(NAlignment.CENTER)
-            .create()
-        printer.addImage(format)
-        printer.addPaperFeed(PAPER_FEED_LINES)
+        awaitReady(printer, details)
 
-        val result = AsyncPrintResult()
-        printer.startPrint(object : NPrintListener {
-            override fun onSuccess() = result.success()
-
-            override fun onError(errorCode: NPrintErrorCode?, message: String?) {
-                result.failure("${errorCode?.name ?: "FAILED"}: ${message.orEmpty()}")
+        val encoded = ByteArrayOutputStream().use { output ->
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                throw IllegalStateException("Nao foi possivel codificar $label em PNG.")
             }
-        })
-        result.await("PRINTER_PRO bitmap", details)
-    }
-
-    private fun printTextLegacy(
-        context: Context,
-        printer: PrinterModule,
-        text: String,
-        details: MutableList<String>
-    ) {
-        awaitReady("PRINTER", details) { printer.status.name }
-        val script = printer.getPrintScriptUtil(context)
-        script.reset()
-        val format = TextFormat().apply {
-            fontSize = FontSize.NORMAL
-            alignment = Alignment.LEFT
-            isLinefeed = true
+            output.toByteArray()
         }
-        script.addText(format, text)
-        script.addPaperFeed(PAPER_FEED_LINES)
+        details += "$label=${bitmap.width}x${bitmap.height}/${encoded.size} bytes"
 
         val result = AsyncPrintResult()
-        script.print(object : PrintListener {
-            override fun onSuccess() = result.success()
-
-            override fun onError(errorCode: ErrorCode?, message: String?) {
-                result.failure("${errorCode?.name ?: "FAILED"}: ${message.orEmpty()}")
-            }
-        })
-        result.await("PRINTER", details)
+        printer.printImage(
+            encoded,
+            0,
+            bitmap.width,
+            bitmap.height,
+            PrintingResultListener(result::onEvent)
+        )
+        result.await(label, details)
     }
 
-    private fun printBitmapLegacy(
-        context: Context,
-        printer: PrinterModule,
-        bitmap: Bitmap,
-        details: MutableList<String>
-    ) {
-        awaitReady("PRINTER", details) { printer.status.name }
-        val script = printer.getPrintScriptUtil(context)
-        script.reset()
-        val format = ImageFormat().apply {
-            width = bitmap.width
-            height = bitmap.height
-            offset = 0
-            alignment = Alignment.CENTER
-        }
-        script.addImage(format, bitmap)
-        script.addPaperFeed(PAPER_FEED_LINES)
-
-        val result = AsyncPrintResult()
-        script.print(object : PrintListener {
-            override fun onSuccess() = result.success()
-
-            override fun onError(errorCode: ErrorCode?, message: String?) {
-                result.failure("${errorCode?.name ?: "FAILED"}: ${message.orEmpty()}")
-            }
-        })
-        result.await("PRINTER bitmap", details)
-    }
-
-    private fun awaitReady(
-        module: String,
-        details: MutableList<String>,
-        status: () -> String
-    ) {
+    private fun awaitReady(printer: Printer, details: MutableList<String>) {
         val deadline = SystemClock.elapsedRealtime() + READY_TIMEOUT_MS
-        var current = status()
-        while (current.equals("BUSY", true) && SystemClock.elapsedRealtime() < deadline) {
+        var status = printer.status
+        while (status == PrinterStatus.BUSY && SystemClock.elapsedRealtime() < deadline) {
             SystemClock.sleep(150)
-            current = status()
+            status = printer.status
         }
-        details += "$module status=$current"
-        if (!current.equals("NORMAL", true)) {
-            throw IllegalStateException("Impressora Newland indisponivel: ${statusMessage(current)}")
+        details += "status=${status.name}(${status.code})"
+        if (status != PrinterStatus.OK) {
+            throw IllegalStateException("Impressora Newland indisponivel: ${statusMessage(status)}")
         }
     }
 
-    private fun statusMessage(status: String): String = when (status.uppercase()) {
-        "OUTOF_PAPER" -> "sem papel"
-        "OVER_HEAT" -> "superaquecida"
-        "LOW_VOLTAGE" -> "tensao baixa"
-        "BUSY" -> "ocupada"
-        "DESTROYED" -> "modulo encerrado"
-        "PPSERR" -> "falha do mecanismo de impressao"
-        "CUTTER_ERROR" -> "falha do cortador"
-        else -> status
+    private fun renderTextPages(text: String): List<Bitmap> {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            typeface = Typeface.MONOSPACE
+            textSize = 20f
+        }
+        val usableWidth = PAPER_WIDTH_PX - (HORIZONTAL_MARGIN_PX * 2)
+        while (paint.measureText("M".repeat(32)) > usableWidth && paint.textSize > 16f) {
+            paint.textSize -= 1f
+        }
+
+        val normalized = text.replace("\r\n", "\n").replace('\r', '\n')
+        val lines = normalized.split('\n').flatMap { wrapLine(it, paint, usableWidth) }
+            .ifEmpty { listOf("") }
+        val lineHeight = max(1, ceil(paint.fontSpacing.toDouble()).toInt())
+        val linesPerPage = max(1, PAGE_CONTENT_HEIGHT_PX / lineHeight)
+
+        return lines.chunked(linesPerPage).mapIndexed { index, pageLines ->
+            val finalPage = index == (lines.size - 1) / linesPerPage
+            val contentHeight = max(lineHeight, pageLines.size * lineHeight)
+            val height = contentHeight + if (finalPage) BOTTOM_FEED_PX else 0
+            Bitmap.createBitmap(PAPER_WIDTH_PX, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(Color.WHITE)
+                var baseline = -paint.fontMetrics.top
+                pageLines.forEach { line ->
+                    canvas.drawText(line, HORIZONTAL_MARGIN_PX, baseline, paint)
+                    baseline += lineHeight
+                }
+            }
+        }
+    }
+
+    private fun wrapLine(line: String, paint: Paint, maxWidth: Float): List<String> {
+        if (line.isEmpty()) return listOf("")
+        val result = mutableListOf<String>()
+        var remaining = line
+        while (remaining.isNotEmpty()) {
+            if (paint.measureText(remaining) <= maxWidth) {
+                result += remaining
+                break
+            }
+
+            var low = 1
+            var high = remaining.length
+            while (low < high) {
+                val middle = (low + high + 1) / 2
+                if (paint.measureText(remaining, 0, middle) <= maxWidth) low = middle else high = middle - 1
+            }
+            val fitting = max(1, low)
+            val whitespace = remaining.lastIndexOf(' ', fitting - 1)
+            val cut = if (whitespace > 0) whitespace else fitting
+            result += remaining.substring(0, cut).trimEnd()
+            remaining = remaining.substring(if (whitespace > 0) cut + 1 else cut).trimStart()
+        }
+        return result
+    }
+
+    private fun withBottomFeed(source: Bitmap): Bitmap =
+        Bitmap.createBitmap(PAPER_WIDTH_PX, source.height + BOTTOM_FEED_PX, Bitmap.Config.ARGB_8888)
+            .also { bitmap ->
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(Color.WHITE)
+                val left = ((PAPER_WIDTH_PX - source.width) / 2f).coerceAtLeast(0f)
+                canvas.drawBitmap(source, left, 0f, null)
+            }
+
+    private fun unavailableAttempt(): PrinterAttempt? {
+        val identity = listOf(
+            Build.MANUFACTURER,
+            Build.BRAND,
+            Build.MODEL,
+            Build.DEVICE,
+            Build.PRODUCT
+        ).joinToString(" ").uppercase()
+        val isNewland = identity.contains("NEWLAND") ||
+            identity.contains("N960") || identity.contains("N950") || identity.contains("N910")
+        return if (isNewland) {
+            null
+        } else {
+            PrinterAttempt(
+                available = false,
+                success = false,
+                backend = BACKEND,
+                detail = "Terminal nao identificado como Newland; adaptador NSDK nao inicializado."
+            )
+        }
+    }
+
+    private fun statusMessage(status: PrinterStatus): String = when (status) {
+        PrinterStatus.NO_PAPER -> "sem papel"
+        PrinterStatus.OVERHEAT -> "superaquecida"
+        PrinterStatus.VOL_ERR -> "tensao inadequada"
+        PrinterStatus.BUSY -> "ocupada"
+        PrinterStatus.BAD -> "falha do mecanismo"
+        else -> status.name
+    }
+
+    private fun resultMessage(code: Int): String = when (code) {
+        -1 -> "falha generica"
+        -6 -> "parametro invalido"
+        RESULT_BUSY -> "ocupada"
+        2 -> "sem papel"
+        4 -> "superaquecida"
+        112 -> "tensao inadequada"
+        512 -> "falha do cortador"
+        1024 -> "modulo encerrado"
+        2048 -> "falha do mecanismo"
+        else -> "codigo $code"
     }
 
     private class AsyncPrintResult {
         private val completed = CountDownLatch(1)
-        private val error = AtomicReference<String?>()
+        private val resultCode = AtomicInteger(Int.MIN_VALUE)
 
-        fun success() {
+        fun onEvent(code: Int) {
+            if (code == RESULT_BUSY) return
+            resultCode.compareAndSet(Int.MIN_VALUE, code)
             completed.countDown()
         }
 
-        fun failure(message: String) {
-            error.compareAndSet(null, message)
-            completed.countDown()
-        }
-
-        fun await(module: String, details: MutableList<String>) {
+        fun await(label: String, details: MutableList<String>) {
             if (!completed.await(CALLBACK_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 throw IllegalStateException(
-                    "$module nao confirmou a impressao em $CALLBACK_TIMEOUT_SECONDS segundos."
+                    "$label nao confirmou a impressao em $CALLBACK_TIMEOUT_SECONDS segundos."
                 )
             }
-            error.get()?.let { throw IllegalStateException("$module retornou $it") }
-            details += "$module callback=sucesso"
+            val code = resultCode.get()
+            if (code != RESULT_SUCCESS) {
+                throw IllegalStateException("$label retornou ${resultMessage(code)}.")
+            }
+            details += "$label callback=sucesso"
         }
     }
 

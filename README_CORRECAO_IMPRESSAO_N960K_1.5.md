@@ -1,60 +1,77 @@
-# Correcao da impressao Newland N960K - versao 1.5
+# VisionID 1.5 - N960K sem MANAGE_NEWLAND
 
-## Causa raiz
+## Objetivo
 
-A dependencia `com.github.lion0508:Newland_MESDK:4f0fc6d` nao continha o SDK.
-O artefato produzido pelo JitPack era um JAR de 1.367 bytes somente com metadados,
-enquanto o AAR real `MESDK-3.10.46-RELEASE.aar` possui 6.313.308 bytes.
+Manter a impressao termica da Newland N960K sem declarar a permissao
+privilegiada `android.permission.MANAGE_NEWLAND` e sem alterar os adaptadores
+que ja atendem a L400.
 
-O codigo tambem procurava nomes da API antiga (`com.newland.me.ConnUtils`,
-`com.newland.mtype.ModuleType` e `COMMON_PRINTER`). No MESDK 3.10.46, as APIs
-corretas sao `com.newland.sdk.me.ConnUtils`, `com.newland.sdk.mtype.ModuleType`
-e os modulos `PRINTER_PRO`/`PRINTER`.
+## Solucao aplicada
 
-## Correcao aplicada
+O MESDK 3.10.46 foi retirado porque o proprio AAR acrescentava
+`MANAGE_NEWLAND` e outras permissoes de administracao ao manifesto final.
+Simplesmente remover a linha do manifesto do aplicativo deixaria essa
+dependencia privilegiada ativa e poderia causar falha em tempo de execucao.
 
-- O AAR real foi incluido localmente em `app/libs`, sem depender de uma publicacao
-  JitPack incorreta.
-- A conexao segue a ordem exigida pelo SDK: `init(Context)`, `connect()` e
-  `getDevice()`.
-- O app usa primeiro o modulo de script `PRINTER`, seguindo o exemplo publico
-  funcional pesquisado, e conserva `PRINTER_PRO` como alternativa de firmware.
-- Texto e bitmap aguardam o callback real `onSuccess`/`onError`; uma chamada `void`
-  nao e mais tratada antecipadamente como impressao concluida.
-- Estado sem papel, superaquecimento, baixa tensao e impressora ocupada sao
-  registrados com diagnostico especifico.
-- As rotas da Positivo L400 (`XchengAidlPrinter` e `BluetoothInternalPrinter`)
-  nao foram alteradas.
+A integracao da N960K agora usa o modulo de impressora do Newland NSDK 2.8.0:
 
-## Origem e integridade do SDK
+1. `NSDKModuleManagerImpl` inicializa a API com o contexto do aplicativo.
+2. O modulo `ModuleType.PRINTER` e obtido como `Printer`.
+3. Comprovantes sao renderizados em paginas monocromaticas de 384 pontos.
+4. Texto e fotografias sao codificados em PNG e enviados por `printImage`.
+5. Estado, falta de papel, temperatura, tensao e retorno assincrono sao tratados.
 
-- Repositorio: <https://github.com/lion0508/Newland_MESDK>
-- Commit: `4f0fc6d`
-- Arquivo: `MESDK-3.10.46-RELEASE.aar`
-- SHA-256: `84932BD9D69AB826FC36A3F66FAB9844FC9CA2DC9589A729CFF28036573F5B1F`
+O adaptador NSDK so e inicializado quando o terminal e identificado como
+Newland. As classes e a ordem preferencial da L400 (`XchengAidlPrinter` e
+`BluetoothInternalPrinter`) nao foram alteradas.
 
-Como referencia de uso da impressora por script e callback, tambem foi analisado:
-<https://github.com/mahdi-code007/PrinterSimple-Newland-Android>.
+## Permissoes
 
-Fontes do fabricante consultadas:
+A auditoria do APK compilado confirmou que nao estao presentes:
 
-- SDK Manager: <https://www.newlandnpt.com.br/cloud/sdk/>
-- Familia SmartPOS N950K (Android e impressora termica de 58 mm):
-  <https://www.newlandnpt.com.br/product/smartpos/156008.html>
+- `android.permission.MANAGE_NEWLAND`
+- `android.permission.MANAGE_NEWLANDUART3`
+- `android.permission.MANAGE_ANALOG_SERIAL`
+- `android.permission.WRITE_APN_SETTINGS`
 
-## Validacao local
+O NSDK possui declaracoes de localizacao destinadas a modulos Bluetooth que
+nao sao usados nesta integracao. Essas duas declaracoes sao removidas durante
+o merge do manifesto. As permissoes Bluetooth ja existentes continuam porque
+fazem parte do fallback funcional da L400.
 
-Executado com sucesso:
+## Dependencia fixada
 
-```bash
-./gradlew :app:assembleDebug
-./gradlew :app:compileReleaseKotlin :app:testDebugUnitTest
+- Artefato: `ng.nownow.newland.nsdk:NewlandNsdk:2.8.0`
+- Arquivo local: `app/libs/NewlandNsdk-2.8.0.aar`
+- SHA-256: `ABDCC2C72691CFB6A4DE68B0AC46DC8A87B4723BCE1CBA049C9150494CCB2B27`
+- Catalogo: <https://central.sonatype.com/artifact/ng.nownow.newland.nsdk/NewlandNsdk>
+- Portal SDK Newland: <https://www.newlandnpt.com.br/cloud/sdk/>
+
+O AAR inclui bibliotecas nativas `armeabi-v7a` e `arm64-v8a`; ambas foram
+confirmadas dentro do APK gerado.
+
+## Versao e verificacoes
+
+- `versionName`: `1.5`
+- `versionCode`: `14`
+- `minSdk`: `26`
+- `targetSdk`: `35`
+- `compileSdk`: `36`
+- `assembleDebug`: aprovado
+- `compileReleaseKotlin`: aprovado
+- assinatura do APK de teste: Android Debug, esquema V2, valida
+
+Comando de compilacao:
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+.\gradlew.bat :app:assembleDebug :app:compileReleaseKotlin
 ```
 
-O APK de release assinado nao foi gerado porque o arquivo externo configurado
-em `keystore.properties` (`C:\Users\Lucas\Documents\MinhaKeystore\visionid.jks`)
-nao estava no ZIP nem na maquina de compilacao. Nao foi criada outra chave para
-nao impedir a atualizacao sobre uma instalacao assinada anteriormente.
+## Observacao de homologacao
 
-O teste fisico final deve ser feito no N960K com papel, observando o retorno
-registrado na area de Logs do aplicativo.
+A compilacao e a auditoria estatica passaram, mas a impressao deve ser
+homologada em uma N960K fisica, especialmente em relacao ao firmware instalado.
+O APK fornecido e assinado para debug. Para publicar ou atualizar uma instalacao
+assinada para producao e necessario compilar com o `visionid.jks` original, que
+nao acompanha este codigo-fonte.
