@@ -25,9 +25,13 @@ android {
         applicationId = "com.example.laranjinhaqrwebview"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.5"
+        versionCode = 15
+        versionName = "1.6"
         manifestPlaceholders["cleartextTrafficPermitted"] = "false"
+    }
+
+    androidResources {
+        localeFilters += listOf("pt", "en")
     }
 
     signingConfigs {
@@ -49,8 +53,8 @@ android {
         }
 
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             manifestPlaceholders["cleartextTrafficPermitted"] = "false"
 
@@ -58,6 +62,27 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+
+    // O aplicativo roda nos terminais ARM homologados. As variantes x86/x86_64
+    // do GeckoView servem apenas a emuladores e adicionavam quase 200 MB ao APK.
+    // Um APK por arquitetura evita instalar os binários ARM de duas arquiteturas
+    // no mesmo terminal. Não é gerado APK universal para impedir regressões de peso.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = false
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Compacta as bibliotecas nativas dentro do APK. No Android 8+ elas são
+            // extraídas na instalação, reduzindo bastante o arquivo de distribuição.
+            useLegacyPackaging = true
         }
     }
 

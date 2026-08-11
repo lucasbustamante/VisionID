@@ -1,32 +1,29 @@
-# Assinatura do VisionID 1.1
+# Assinatura do VisionID 1.6
 
-Este projeto foi configurado para gerar o APK de release já assinado.
+O release deve ser assinado com a mesma chave das versões já instaladas para
+que o Android aceite a atualização.
 
-## Versão
-- versionName: 1.1
-- versionCode: 2
+## Configuração local
 
-## Keystore
-- Arquivo: visionid-release.jks
-- Alias: visionid
-- Senha da keystore: VisionID@1.1#2026
-- Senha da chave: VisionID@1.1#2026
+1. Copie `keystore.properties.example` para `keystore.properties`.
+2. Preencha o caminho da chave, o alias e as senhas reais.
+3. Mantenha `keystore.properties` e o arquivo `.jks` fora do controle de versão.
 
-## Gerar o APK assinado
-No terminal, na raiz do projeto:
+O arquivo `.gitignore` já protege esses arquivos. Credenciais de assinatura não
+devem ser colocadas em README, commits ou pacotes de código-fonte.
 
-Windows CMD/PowerShell:
+## Gerar o release
 
-    gradlew.bat clean assembleRelease
+No PowerShell, na raiz do projeto:
 
-Git Bash:
+```powershell
+.\gradlew.bat :app:assembleRelease
+```
 
-    ./gradlew clean assembleRelease
+Os APKs são gerados em `app/build/outputs/apk/release/`:
 
-O APK será gerado em:
+- `app-armeabi-v7a-release.apk` para ARM de 32 bits;
+- `app-arm64-v8a-release.apk` para ARM de 64 bits.
 
-    app/build/outputs/apk/release/app-release.apk
-
-O arquivo não deverá mais ser gerado com o sufixo `-unsigned`.
-
-IMPORTANTE: preserve a keystore e as senhas. Atualizações futuras do mesmo aplicativo precisam usar exatamente a mesma chave.
+Preserve a keystore original em local seguro. Atualizações futuras precisam usar
+exatamente a mesma chave de assinatura.
