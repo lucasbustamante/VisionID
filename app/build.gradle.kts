@@ -28,6 +28,13 @@ android {
         versionCode = 15
         versionName = "1.6"
         manifestPlaceholders["cleartextTrafficPermitted"] = "false"
+
+        // Restringe inclusive o APK universal às arquiteturas dos terminais.
+        // Sem esse filtro, dependências como GeckoView/ML Kit também adicionam
+        // bibliotecas x86 e x86_64 ao universal.
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     androidResources {
@@ -67,14 +74,15 @@ android {
 
     // O aplicativo roda nos terminais ARM homologados. As variantes x86/x86_64
     // do GeckoView servem apenas a emuladores e adicionavam quase 200 MB ao APK.
-    // Um APK por arquitetura evita instalar os binários ARM de duas arquiteturas
-    // no mesmo terminal. Não é gerado APK universal para impedir regressões de peso.
+    // Mantém os APKs otimizados por arquitetura e também gera um APK universal.
+    // O universal é o artefato indicado quando a mesma distribuição precisa
+    // atender terminais ARM de 32 bits (L400) e de 64 bits (N960K).
     splits {
         abi {
             isEnable = true
             reset()
             include("armeabi-v7a", "arm64-v8a")
-            isUniversalApk = false
+            isUniversalApk = true
         }
     }
 

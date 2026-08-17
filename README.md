@@ -26,7 +26,9 @@ No Git Bash, com `JAVA_HOME` configurado:
 O APK será criado em:
 
 ```text
-app/build/outputs/apk/release/app-release-unsigned.apk
+app/build/outputs/apk/release/app-universal-release.apk
 ```
 
-Para distribuição, o APK release deve ser assinado com uma chave própria.
+O build também gera APKs otimizados para `armeabi-v7a` e `arm64-v8a`.
+Para uma única distribuição compatível com L400 e N960K, use o APK universal.
+Os APKs de release são assinados com a chave configurada em `keystore.properties`.

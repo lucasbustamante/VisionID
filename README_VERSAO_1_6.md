@@ -8,6 +8,8 @@
 ## Otimizações aplicadas
 
 - geração de APKs separados para `armeabi-v7a` e `arm64-v8a`;
+- geração adicional de APK universal para distribuição conjunta em terminais
+  ARM de 32 e 64 bits;
 - remoção das variantes `x86` e `x86_64`, usadas apenas por emuladores;
 - compactação das bibliotecas nativas dentro do APK;
 - minificação de bytecode com R8;
@@ -20,6 +22,7 @@ branco do WebView de sistema nesses equipamentos.
 
 ## APK correto para cada equipamento
 
+- `app-universal-release.apk`: distribuição única compatível com L400 e N960K;
 - `app-armeabi-v7a-release.apk`: Android ARM de 32 bits;
 - `app-arm64-v8a-release.apk`: Android ARM de 64 bits.
 
@@ -29,12 +32,15 @@ Em um terminal conectado por ADB, a arquitetura pode ser consultada com:
 adb shell getprop ro.product.cpu.abi
 ```
 
-Não instale as duas variantes no mesmo equipamento. Se a resposta começar com
-`arm64`, use `arm64-v8a`; se for `armeabi-v7a`, use a variante de 32 bits.
+Para uma plataforma que distribui o mesmo arquivo aos dois modelos, use a
+variante universal. Para instalação manual otimizada, não instale as duas
+variantes no mesmo equipamento: se a resposta começar com `arm64`, use
+`arm64-v8a`; se for `armeabi-v7a`, use a variante de 32 bits.
 
 ## Resultado validado
 
 - APK original universal: 529,53 MiB;
+- APK 1.6 universal ARM (`armeabi-v7a` + `arm64-v8a`): 161,59 MiB;
 - APK 1.6 `arm64-v8a`: 91,15 MiB (redução de 82,8%);
 - APK 1.6 `armeabi-v7a`: 88,51 MiB (redução de 83,3%);
 - build `assembleRelease`: aprovado;
