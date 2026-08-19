@@ -25,8 +25,8 @@ android {
         applicationId = "com.example.laranjinhaqrwebview"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.6"
+        versionCode = 16
+        versionName = "1.7"
         manifestPlaceholders["cleartextTrafficPermitted"] = "false"
 
         // Restringe inclusive o APK universal às arquiteturas dos terminais.
@@ -72,19 +72,10 @@ android {
         }
     }
 
-    // O aplicativo roda nos terminais ARM homologados. As variantes x86/x86_64
-    // do GeckoView servem apenas a emuladores e adicionavam quase 200 MB ao APK.
-    // Mantém os APKs otimizados por arquitetura e também gera um APK universal.
-    // O universal é o artefato indicado quando a mesma distribuição precisa
-    // atender terminais ARM de 32 bits (L400) e de 64 bits (N960K).
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a")
-            isUniversalApk = true
-        }
-    }
+    // Gera um unico APK ARM contendo as duas ABIs suportadas pelo aplicativo.
+    // Isso evita que plataformas de distribuicao/MDM publiquem por engano apenas
+    // o split arm64-v8a em terminais cujo Android executa apps ARM de 32 bits.
+    // As ABIs permanecem limitadas em defaultConfig.ndk.abiFilters acima.
 
     packaging {
         jniLibs {
